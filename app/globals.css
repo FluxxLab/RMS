@@ -1,26 +1,248 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * BIL RMS design tokens — Fluent 2 / Outlook web design language.
+ * Brand values come from the approved Outlook frames; the neutral, stroke,
+ * status, elevation and type ramps follow Fluent 2 so every surface, control
+ * and state reads as one system.
+ */
+@theme {
+  /* Nunito Sans alone. next/font still appends its own metric-matched
+   * fallback inside the variable, which is what stops the swap shifting layout. */
+  --font-sans: var(--font-nunito-sans);
+
+  /* Brand — deep indigo, oklch(30% .16 274); every step below shares the hue */
+  --color-brand: oklch(30% 0.16 274);
+  --color-brand-hover: oklch(26% 0.15 274);
+  --color-brand-pressed: oklch(22% 0.14 274);
+  --color-brand-deep: oklch(30% 0.16 274);
+  --color-brand-ink: oklch(24% 0.13 274);
+  --color-brand-tint: oklch(91% 0.05 274);
+  --color-brand-tint-2: oklch(96% 0.025 274);
+
+  /* Neutral backgrounds (Fluent 2 neutralBackground1–6) */
+  --color-bg-1: #ffffff;
+  --color-bg-2: #fafafa;
+  --color-bg-3: #f5f5f5;
+  --color-bg-4: #f0f0f0;
+  --color-bg-5: #ebebeb;
+  --color-bg-6: #e6e6e6;
+
+  /* Neutral foregrounds (Fluent 2 neutralForeground1–4) */
+  --color-fg-1: #242424;
+  --color-fg-2: #424242;
+  --color-fg-3: #616161;
+  --color-fg-4: #707070;
+  --color-fg-disabled: #bdbdbd;
+
+  /* Strokes */
+  --color-stroke-1: #d1d1d1;
+  --color-stroke-2: #e0e0e0;
+  --color-stroke-3: #f0f0f0;
+  --color-stroke-accessible: #616161;
+
+  /* Status (fg / bg / stroke) */
+  --color-success-fg: #0e700e;
+  --color-success-bg: #f1faf1;
+  --color-success-stroke: #9fd89f;
+  --color-danger-fg: #c50f1f;
+  --color-danger-hover: #b10e1c;
+  --color-danger-bg: #fdf3f4;
+  --color-danger-stroke: #eeacb2;
+  --color-warning-fg: #bc4b09;
+  --color-warning-bg: #fff9f5;
+  --color-warning-stroke: #fdcfb4;
+
+  /* Shell aliases used by the Outlook-frame chrome */
+  --color-canvas: #fafafa;
+  --color-rail: #f0f0f0;
+  --color-surface: #ffffff;
+  --color-divider: #e5e5e5;
+  --color-hairline: rgba(0, 0, 0, 0.0578);
+  --color-ink: #242424;
+  --color-ink-2: #424242;
+  --color-icon: #616161;
+  --color-icon-muted: #828282;
+  --color-chevron: #838383;
+  --color-success: #0e700e;
+  --color-danger: #c50f1f;
+  --color-flag: #973131;
+  --color-link: #0070cb;
+  --color-reply: #7d2393;
+
+  /* Elevation (Fluent 2 shadow ramp) */
+  --shadow-2: 0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14);
+  --shadow-4: 0 0 2px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.14);
+  --shadow-8: 0 0 2px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.14);
+  --shadow-16: 0 0 2px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.14);
+  --shadow-28: 0 0 8px rgba(0, 0, 0, 0.12), 0 14px 28px rgba(0, 0, 0, 0.14);
+  --shadow-64: 0 0 8px rgba(0, 0, 0, 0.12), 0 32px 64px rgba(0, 0, 0, 0.14);
+  --shadow-card: var(--shadow-4);
+
+  /* Corner radii (Fluent 2: small 2 · medium 4 · large 6 · xlarge 8) */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+
+  /* Chart series — one ordered ramp on the brand hue. Slices and bars are
+   * ranked by size, so a sequential ramp reads correctly; every series is also
+   * named in a legend, so identity never rests on telling two steps apart. */
+  --color-series-1: oklch(30% 0.16 274);
+  --color-series-2: oklch(46% 0.15 274);
+  --color-series-3: oklch(61% 0.12 274);
+  --color-series-4: oklch(74% 0.09 274);
+  --color-series-5: oklch(86% 0.05 274);
+
+  /* Form surfaces (from the account-setup frame) */
+  --color-field-border: #cfd3d5;
+  --color-field-placeholder: #abafb1;
+  --color-field-label: #5e6366;
+  --color-panel-border: #dde2e6;
+  --color-heading-ink: #2b2f32;
+
+  /* The frame’s measure: bar, view and footer share it, so their gutters align. */
+  --container-shell: 1440px;
+
+  /* Motion */
+  --ease-fluent: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-fluent-decel: cubic-bezier(0, 0, 0, 1);
+
+  /* Weight ceiling: nothing renders heavier than 600. Headings and the strong
+   * tier sit at 600; body stays 400. These overrides keep anything heavier
+   * that slips in — `font-bold`, `font-black` — pinned to the ceiling. */
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ---------- Fluent 2 type ramp ---------- */
+@utility type-caption {
+  font-size: 12px;
+  line-height: 16px;
+}
+@utility type-caption-strong {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+@utility type-body {
+  font-size: 14px;
+  line-height: 20px;
+}
+@utility type-body-strong {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+@utility type-body-lg {
+  font-size: 16px;
+  line-height: 22px;
+}
+@utility type-subtitle-2 {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+@utility type-subtitle {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+}
+@utility type-title-3 {
+  font-size: 24px;
+  line-height: 29px;
+  font-weight: 600;
+}
+@utility type-title-2 {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+}
+@utility type-title {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+}
+@utility type-large-title {
+  font-size: 40px;
+  line-height: 52px;
+  font-weight: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Fluent focus treatment: 2px ink ring outside the control, on keyboard focus only. */
+@utility focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  &:focus-visible {
+    outline-color: var(--color-fg-1);
+  }
+}
+@utility focus-ring-inverse {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  &:focus-visible {
+    outline-color: #ffffff;
   }
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg-2);
+  color: var(--color-fg-1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-brand-tint);
+}
+
+/* Thin, unobtrusive scrollbars like the Outlook web client. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #c8c8c8 transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #c8c8c8;
+  border-radius: 8px;
+}
+
+/* Entrance motion for page content — subtle, decelerating, and off when the user asks. */
+@keyframes fluent-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: fluent-rise 240ms var(--ease-fluent-decel) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
