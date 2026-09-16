@@ -20,7 +20,7 @@
   // Worker's variables with this list, so anything set by hand gets wiped.
   // Workers cannot fetch a bare IP address, so the API is reached by hostname.
   "vars": {
-    "API_BASE_URL": "http://ec2-16-60-126-219.eu-west-2.compute.amazonaws.com"
+    "API_BASE_URL": "http://ec2-18-132-238-175.eu-west-2.compute.amazonaws.com"
   },
   "images": {
     "binding": "IMAGES"
