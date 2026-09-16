@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 export interface MenuItem {
   label: string;
@@ -49,14 +50,60 @@ export function Menu({
 }: MenuProps) {
   const menuId = useId();
   const [open, setOpen] = useState(false);
+  /*
+   * Where the panel sits on screen.
+   *
+   * It is rendered into the body rather than beside its trigger, because a
+   * menu inside a scrolling table is clipped by that table: an absolutely
+   * positioned panel cannot escape an `overflow` ancestor, so the last row's
+   * menu opens inside the frame and loses half of itself. Positioning it with
+   * the trigger's own rectangle puts it back on top of the table.
+   */
+  const [at, setAt] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLElement | null)[]>([]);
+
+  const place = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const GAP = 8;
+    const EDGE = 8;
+    // `end` aligns the panel's right edge with the trigger's, then both edges
+    // are clamped so a menu near the window's border stays fully on screen.
+    const wanted = align === "end" ? rect.right - width : rect.left;
+    const left = Math.max(EDGE, Math.min(wanted, window.innerWidth - width - EDGE));
+    const top = rect.bottom + GAP;
+
+    setAt({ top, left, maxHeight: Math.max(120, window.innerHeight - top - EDGE) });
+  }, [align, width]);
 
   const close = useCallback((returnFocus: boolean) => {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus();
   }, []);
+
+  // Measured before paint, so the panel never appears at the wrong place first.
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place]);
+
+  /*
+   * Kept under the trigger while anything scrolls. The listener is capturing so
+   * it hears the table's own scrollbar, not just the window's — that inner
+   * scroller is the whole reason the panel had to leave the table.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const follow = () => place();
+    window.addEventListener("scroll", follow, true);
+    window.addEventListener("resize", follow);
+    return () => {
+      window.removeEventListener("scroll", follow, true);
+      window.removeEventListener("resize", follow);
+    };
+  }, [open, place]);
 
   // Opening moves focus onto the first item, so the menu is usable without a pointer.
   useEffect(() => {
@@ -131,18 +178,18 @@ export function Menu({
         {trigger}
       </button>
 
-      {open && (
-        <div
-          ref={panelRef}
-          id={menuId}
-          role="menu"
-          aria-label={label}
-          onKeyDown={onPanelKeyDown}
-          style={{ width }}
-          className={`absolute top-[calc(100%+8px)] z-50 rounded-2xl border border-panel-border bg-bg-1 p-2 text-fg-1 shadow-16 ${
-            align === "end" ? "right-0" : "left-0"
-          }`}
-        >
+      {open &&
+        at &&
+        createPortal(
+          <div
+            ref={panelRef}
+            id={menuId}
+            role="menu"
+            aria-label={label}
+            onKeyDown={onPanelKeyDown}
+            style={{ position: "fixed", top: at.top, left: at.left, width, maxHeight: at.maxHeight }}
+            className="scroll-thin z-50 overflow-y-auto rounded-2xl border border-panel-border bg-bg-1 p-2 text-fg-1 shadow-16"
+          >
           {header && <div className="px-3 pb-3 pt-2">{header}</div>}
           {header && <div className="mb-2 border-t border-stroke-2" />}
           {items.map((item, i) =>
@@ -187,8 +234,9 @@ export function Menu({
               <p className="px-3 pb-1 text-[14px] leading-[17px] text-field-label">{footer}</p>
             </>
           )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

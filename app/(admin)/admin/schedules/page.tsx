@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { SchedulesPanel } from "@/components/admin/schedules-panel";
-import { SessionsPanel } from "@/components/admin/sessions-panel";
 import { Breadcrumb, PageHeader } from "@/components/fluent";
 import { Calendar, CheckmarkCircle, Clock, Timer } from "@/components/icons";
 import { StatRow, StatTile } from "@/components/ui/stat-tile";
@@ -51,8 +50,7 @@ export default async function AdminSchedulesPage() {
         <StatTile icon={<Clock />} label="Cancelled" value={String(cancelled)} detail="sessions no longer running" />
       </StatRow>
 
-      <SessionsPanel studies={schedulable} />
-      <SchedulesPanel slots={sessions} now={now} />
+      <SchedulesPanel slots={sessions} studies={schedulable} now={now} />
     </section>
   );
 }

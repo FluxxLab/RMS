@@ -3,6 +3,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { z } from "zod";
 
+import { readSessionToken } from "./set-cookie";
+
 /*
  * The one door to the NestJS API. Every read and write goes through here, so
  * the base URL, the session cookie and response validation are decided once.
@@ -243,7 +245,7 @@ export async function authenticate(
   }
 
   const setCookie = response.headers.get("set-cookie") ?? "";
-  const token = new RegExp(`(?:^|[,;\s])${SESSION_COOKIE}=([^;,]+)`).exec(setCookie)?.[1];
+  const token = readSessionToken(setCookie, SESSION_COOKIE);
   if (!token) {
     return { ok: false, error: { kind: "malformed", message: "The API accepted the sign-in but issued no session." } };
   }

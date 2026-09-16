@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { RouteProgress } from "@/components/shell/route-progress";
 
 /*
  * Nunito Sans, self-hosted. next/font/google fetches from fonts.googleapis.com
@@ -27,7 +28,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${nunitoSans.variable} h-full antialiased`}>
-      <body className="flex h-full flex-col overflow-hidden">{children}</body>
+      <body className="flex h-full flex-col overflow-hidden">
+        {/* Above every console, so a click is answered wherever it happens. */}
+        <RouteProgress />
+        {children}
+      </body>
     </html>
   );
 }

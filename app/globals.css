@@ -237,6 +237,27 @@ body {
   animation: fluent-rise 240ms var(--ease-fluent-decel) both;
 }
 
+/*
+ * The loading sweep: a short bar travelling the width of its track.
+ *
+ * Indeterminate on purpose — the app cannot know how long a fetch will take,
+ * and a progress bar that invents a percentage is a lie that gets found out on
+ * the slow connections it matters most on. The reduced-motion rule below stops
+ * it, which is why the mark also carries its own label.
+ */
+@keyframes loader-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@utility animate-loader-sweep {
+  animation: loader-sweep 1.1s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ParticipantsRegistry } from "@/components/participants/participants-registry";
 import { DataError } from "@/components/ui/data-error";
-import { getBookings, getInterestLeads, getParticipants, getSlots, pageData } from "@/lib/api";
+import { getBookings, getParticipants, getSlots, pageData } from "@/lib/api";
 import { serverNow } from "@/lib/now";
 import {
   buildRegistry,
@@ -36,22 +36,19 @@ export default async function ParticipantsPage({ searchParams }: PageProps<"/sta
 
   // Four pseudonym-keyed feeds, joined below. The slot ledger is here only to
   // tell an upcoming session from one that has already run.
-  const [profilesResult, bookingsResult, slotsResult, leadsResult] = await Promise.all([
+  const [profilesResult, bookingsResult, slotsResult] = await Promise.all([
     getParticipants(),
     getBookings(),
     getSlots(),
-    getInterestLeads(),
   ]);
 
   const profiles = pageData(profilesResult);
   const bookings = pageData(bookingsResult);
   const slots = pageData(slotsResult);
-  const leads = pageData(leadsResult);
 
   if (!profiles.ok) return <DataError breadcrumb={CRUMBS} title="Participants" message={profiles.message} />;
   if (!bookings.ok) return <DataError breadcrumb={CRUMBS} title="Participants" message={bookings.message} />;
   if (!slots.ok) return <DataError breadcrumb={CRUMBS} title="Participants" message={slots.message} />;
-  if (!leads.ok) return <DataError breadcrumb={CRUMBS} title="Participants" message={leads.message} />;
 
   const startById = new Map(slots.data.map((slot) => [slot.id, slot.start]));
 
@@ -64,7 +61,7 @@ export default async function ParticipantsPage({ searchParams }: PageProps<"/sta
       checkedInAt: booking.checkedInAt,
       start: startById.get(booking.scheduleId),
     })),
-    leads.data.map((lead) => ({ pid: lead.pid, tags: lead.tags, createdAt: lead.updatedAt })),
+    [],
     serverNow(),
   );
 

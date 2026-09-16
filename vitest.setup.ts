@@ -18,3 +18,19 @@ afterEach(() => {
 if (typeof HTMLCanvasElement !== "undefined") {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 }
+
+/*
+ * jsdom implements <dialog> but not its modal methods, so a component that
+ * calls showModal() throws before it renders anything. The real element also
+ * hides its content until opened; mirroring that with the `open` attribute is
+ * what lets a test tell an open dialog from a closed one.
+ */
+if (typeof HTMLDialogElement !== "undefined") {
+  HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) {
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
+}

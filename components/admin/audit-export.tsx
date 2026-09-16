@@ -20,15 +20,21 @@ export function AuditExport({ today }: { today: string }) {
       <CardHeader
         size="panel"
         title="Export the log"
-        description="For the compliance pack. Leave the dates empty to take everything."
+        description="For the compliance pack. Both dates are inclusive; leave them empty to take everything."
       />
 
+      {/*
+        * The three controls carry a label and nothing else, so they are the same
+        * height and `items-end` puts every one of them — and the button — on one
+        * line. A hint under only some of them was what pushed the format field
+        * and the button below the dates; "inclusive" is said once, above.
+        */}
       <form action="/api/audit/export" method="get" className="mt-5 flex flex-wrap items-end gap-3">
-        <Field label="From" width="md" hint="Inclusive.">
-          {({ id, describedBy }) => <Input id={id} name="from" type="date" max={today} aria-describedby={describedBy} />}
+        <Field label="From" width="md">
+          {({ id }) => <Input id={id} name="from" type="date" max={today} />}
         </Field>
-        <Field label="To" width="md" hint="Inclusive.">
-          {({ id, describedBy }) => <Input id={id} name="to" type="date" max={today} aria-describedby={describedBy} />}
+        <Field label="To" width="md">
+          {({ id }) => <Input id={id} name="to" type="date" max={today} />}
         </Field>
         <Field label="Format" width="md">
           {({ id }) => (
@@ -38,7 +44,9 @@ export function AuditExport({ today }: { today: string }) {
             </Select>
           )}
         </Field>
-        <Button type="submit" variant="primary">
+        {/* `lg` is the 52px button, matching the height of the controls it
+            sits beside; the default md is 44px and reads as misaligned. */}
+        <Button type="submit" variant="primary" size="lg">
           Export
         </Button>
       </form>

@@ -5,15 +5,24 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { saveScreening, updateScreening } from "@/app/(portal)/actions";
 import { Button, ButtonLink, Checkbox, Field, Input, MessageBar, RadioGroup, Select, Stepper, TagToggle, type Step } from "@/components/fluent";
 
-import { TopicIcon } from "@/components/ui/topic-icon";
+import { COUNTRY_OPTIONS, HOME_COUNTRY, countryName } from "@/lib/countries";
+import { NIGERIA_STATES, lgasOf } from "@/lib/nigeria";
+import {
+  EMPLOYMENT_LABELS,
+  EMPLOYMENT_STATUSES,
+  EXPERIENCE_HINTS,
+  EXPERIENCE_LABELS,
+  EXPERIENCE_LEVELS,
+  SECTORS,
+  worksForPay,
+} from "@/lib/sectors";
 import {
   CONDITIONS,
   EDUCATIONS,
   GENDERS,
   HANDEDNESS,
-  REGIONS,
   MIN_PASSWORD,
-  STEP_SCHEMAS,
+  stepSchemas,
   type WizardAnswers,
 } from "@/lib/screening-schema";
 
@@ -37,7 +46,6 @@ const LABELS = {
     masters: "Master's degree",
     doctorate: "Doctorate",
   },
-  region: { US: "United States", CA: "Canada", UK: "United Kingdom", EU: "European Union", AU: "Australia", Other: "Other" },
   handedness: { right: "Right", left: "Left", ambidextrous: "Ambidextrous" },
   condition: {
     "severe food allergy": "Severe food allergy",
@@ -55,21 +63,18 @@ const YES_NO = [
 ] as const;
 
 interface SignupWizardProps {
-  /** The topics on offer, so the last step matches the published taxonomy. */
-  taxonomy: string[];
   /** Answers already stored, so an update starts from what is known. */
   initialAnswers?: WizardAnswers;
   initialConditions?: string[];
-  initialInterests?: string[];
+  initialSectorExperience?: { sector: string; level: string }[];
   /** True when a profile already exists — the wizard becomes an update. */
   editing?: boolean;
 }
 
 export function SignupWizard({
-  taxonomy,
   initialAnswers = {},
   initialConditions = [],
-  initialInterests = [],
+  initialSectorExperience = [],
   editing = false,
 }: SignupWizardProps) {
   // Contact details live in the vault and are never read back, so an update
@@ -77,7 +82,23 @@ export function SignupWizard({
   const [step, setStep] = useState(editing ? 1 : 0);
   const [answers, setAnswers] = useState<WizardAnswers>(initialAnswers);
   const [declaredConditions, setConditions] = useState<string[]>(initialConditions);
-  const [interests, setInterests] = useState<string[]>(initialInterests);
+  const [sectorExperience, setSectorExperience] = useState<{ sector: string; level: string }[]>(
+    initialSectorExperience,
+  );
+
+  const experienceIn = (sector: string) => sectorExperience.find((e) => e.sector === sector)?.level;
+
+  /* Choosing a sector opens it at the weakest level; choosing it again closes it.
+     A sector with no level is not an answer, so it is removed rather than kept. */
+  const toggleSector = (sector: string) =>
+    setSectorExperience((prev) =>
+      prev.some((e) => e.sector === sector)
+        ? prev.filter((e) => e.sector !== sector)
+        : [...prev, { sector, level: EXPERIENCE_LEVELS[0] }],
+    );
+
+  const setLevel = (sector: string, level: string) =>
+    setSectorExperience((prev) => prev.map((e) => (e.sector === sector ? { ...e, level } : e)));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{ pid: string } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -90,7 +111,21 @@ export function SignupWizard({
   }, [step]);
 
   const set = (key: string, value: string) => {
-    setAnswers((a) => ({ ...a, [key]: value }));
+    setAnswers((a) => {
+      const next = { ...a, [key]: value };
+      // State and LGA only mean something in Nigeria, and an LGA only means
+      // something inside its own state. Leaving a stale one behind would submit
+      // an answer the participant never gave.
+      if (key === "country" && value !== HOME_COUNTRY) {
+        for (const k of ["state", "lga", "stateOfOrigin", "lgaOfOrigin", "phone", "nin", "addressLine"]) {
+          delete next[k];
+        }
+      }
+      if (key === "state") delete next.lga;
+      if (key === "stateOfOrigin") delete next.lgaOfOrigin;
+      if (key === "employmentStatus" && !worksForPay(value)) delete next.workSector;
+      return next;
+    });
     setErrors((e) => {
       if (!e[key]) return e;
       const next = { ...e };
@@ -100,8 +135,8 @@ export function SignupWizard({
   };
 
   const validateStep = (): boolean => {
-    const schema = STEP_SCHEMAS[step];
-    const input: Record<string, unknown> = { ...answers, declaredConditions, interests };
+    const schema = stepSchemas(editing)[step];
+    const input: Record<string, unknown> = { ...answers, declaredConditions, sectorExperience };
     const parsed = schema.safeParse(input);
     if (parsed.success) {
       setErrors({});
@@ -126,7 +161,7 @@ export function SignupWizard({
       return;
     }
     startTransition(async () => {
-      const payload = { ...answers, declaredConditions, interests };
+      const payload = { ...answers, declaredConditions, sectorExperience };
       const r = editing ? await updateScreening(payload) : await saveScreening(payload);
       if (r.ok) setDone({ pid: r.pid });
       else setFailure(r.message);
@@ -256,18 +291,177 @@ export function SignupWizard({
                 </Select>
               )}
             </Field>
-            <Field label="Region of residence" hint="Determines compensation eligibility." error={errors.region}>
+            <Field label="Country of residence" hint="Where you currently live." error={errors.country}>
               {({ id, describedBy, invalid }) => (
-                <Select id={id} name="region" aria-describedby={describedBy} invalid={invalid} value={answers.region ?? ""} onChange={(e) => set("region", e.target.value)}>
+                <Select id={id} name="country" aria-describedby={describedBy} invalid={invalid} value={answers.country ?? ""} onChange={(e) => set("country", e.target.value)}>
                   <option value="">Choose…</option>
-                  {REGIONS.map((v) => (
-                    <option key={v} value={v}>
-                      {LABELS.region[v]}
-                    </option>
-                  ))}
+                  {/* The lab's own country sits first: most participants live here
+                      and should not scroll the alphabet to find it. */}
+                  <optgroup label="Nearby">
+                    <option value={HOME_COUNTRY}>{countryName(HOME_COUNTRY)}</option>
+                  </optgroup>
+                  {/* The home country is offered above, so it is left out here:
+                      two options carrying the same value make the control
+                      display both their labels at once. */}
+                  <optgroup label="All countries">
+                    {COUNTRY_OPTIONS.filter((c) => c.code !== HOME_COUNTRY).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 </Select>
               )}
             </Field>
+
+            {answers.country === HOME_COUNTRY && (
+              <>
+                <Field label="State" hint="The state you live in." error={errors.state}>
+                  {({ id, describedBy, invalid }) => (
+                    <Select id={id} name="state" aria-describedby={describedBy} invalid={invalid} value={answers.state ?? ""} onChange={(e) => set("state", e.target.value)}>
+                      <option value="">Choose…</option>
+                      {NIGERIA_STATES.map((s) => (
+                        <option key={s.state} value={s.state}>
+                          {s.state}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+
+                <Field
+                  label="Local government area"
+                  hint={answers.state ? "The LGA within your state." : "Choose a state first."}
+                  error={errors.lga}
+                >
+                  {({ id, describedBy, invalid }) => (
+                    <Select
+                      id={id}
+                      name="lga"
+                      aria-describedby={describedBy}
+                      invalid={invalid}
+                      disabled={!answers.state}
+                      value={answers.lga ?? ""}
+                      onChange={(e) => set("lga", e.target.value)}
+                    >
+                      <option value="">Choose…</option>
+                      {lgasOf(answers.state ?? "").map((lga) => (
+                        <option key={lga} value={lga}>
+                          {lga}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+
+                <Field label="State of origin" hint="The state you are from." error={errors.stateOfOrigin}>
+                  {({ id, describedBy, invalid }) => (
+                    <Select
+                      id={id}
+                      name="stateOfOrigin"
+                      aria-describedby={describedBy}
+                      invalid={invalid}
+                      value={answers.stateOfOrigin ?? ""}
+                      onChange={(e) => set("stateOfOrigin", e.target.value)}
+                    >
+                      <option value="">Choose…</option>
+                      {NIGERIA_STATES.map((st) => (
+                        <option key={st.state} value={st.state}>
+                          {st.state}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+
+                <Field
+                  label="LGA of origin"
+                  hint={answers.stateOfOrigin ? "The LGA within that state." : "Choose a state of origin first."}
+                  error={errors.lgaOfOrigin}
+                >
+                  {({ id, describedBy, invalid }) => (
+                    <Select
+                      id={id}
+                      name="lgaOfOrigin"
+                      aria-describedby={describedBy}
+                      invalid={invalid}
+                      disabled={!answers.stateOfOrigin}
+                      value={answers.lgaOfOrigin ?? ""}
+                      onChange={(e) => set("lgaOfOrigin", e.target.value)}
+                    >
+                      <option value="">Choose…</option>
+                      {lgasOf(answers.stateOfOrigin ?? "").map((lga) => (
+                        <option key={lga} value={lga}>
+                          {lga}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+
+                {/* Vault-bound, and asked only when registering: the vault is
+                    written once, so an update has nowhere to put a new answer. */}
+                {!editing && (
+                  <>
+                    <Field label="Phone number" hint="Kept in the identity vault, like your name." error={errors.phone}>
+                      {({ id, describedBy, invalid }) => (
+                        <Input
+                          id={id}
+                          name="phone"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          placeholder="08012345678"
+                          aria-describedby={describedBy}
+                          invalid={invalid}
+                          value={answers.phone ?? ""}
+                          onChange={(e) => set("phone", e.target.value)}
+                        />
+                      )}
+                    </Field>
+
+                    <Field
+                      label="National Identification Number"
+                      hint="Eleven digits. Stored encrypted and never shown to researchers."
+                      error={errors.nin}
+                    >
+                      {({ id, describedBy, invalid }) => (
+                        <Input
+                          id={id}
+                          name="nin"
+                          inputMode="numeric"
+                          maxLength={11}
+                          placeholder="12345678901"
+                          aria-describedby={describedBy}
+                          invalid={invalid}
+                          value={answers.nin ?? ""}
+                          onChange={(e) => set("nin", e.target.value)}
+                        />
+                      )}
+                    </Field>
+
+                    <Field
+                      label="Residential address"
+                      hint="Street and area. Kept in the identity vault."
+                      error={errors.addressLine}
+                    >
+                      {({ id, describedBy, invalid }) => (
+                        <Input
+                          id={id}
+                          name="addressLine"
+                          autoComplete="street-address"
+                          placeholder="12 Awolowo Road, Ikoyi"
+                          aria-describedby={describedBy}
+                          invalid={invalid}
+                          value={answers.addressLine ?? ""}
+                          onChange={(e) => set("addressLine", e.target.value)}
+                        />
+                      )}
+                    </Field>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -339,22 +533,102 @@ export function SignupWizard({
         )}
 
         {step === 6 && (
-          <div className="flex flex-col gap-3">
-            <p className="type-body text-fg-3">
-              Topics you would like to hear about. Change them any time.
-            </p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Research interests">
-              {taxonomy.map((tag) => (
-                <TagToggle
-                  key={tag}
-                  label={tag}
-                  icon={<TopicIcon topic={tag} />}
-                  selected={interests.includes(tag)}
-                  onClick={() => setInterests((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))}
-                />
-              ))}
+          <div className="flex flex-col gap-8">
+            <fieldset className="flex flex-col gap-3">
+              <legend className="mb-1 text-[16px] font-medium leading-[19px] text-fg-1">
+                Sectors you have experience in
+              </legend>
+              <p className="-mt-1 type-body text-fg-3">
+                Choose the sectors you have worked in, then say how deeply. Studies recruiting for a field
+                match on this.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SECTORS.map((sector) => (
+                  <TagToggle
+                    key={sector}
+                    label={sector}
+                    selected={experienceIn(sector) !== undefined}
+                    onClick={() => toggleSector(sector)}
+                  />
+                ))}
+              </div>
+
+              {/* The level is asked only for sectors actually chosen, so the step
+                  stays one question until the participant makes it more. */}
+              {sectorExperience.length > 0 && (
+                <ul className="mt-2 flex flex-col gap-3">
+                  {sectorExperience.map((entry) => (
+                    <li
+                      key={entry.sector}
+                      className="flex flex-wrap items-center justify-between gap-3 border-t border-stroke-2 pt-3"
+                    >
+                      <span className="text-[16px] leading-[22px] text-fg-1">{entry.sector}</span>
+                      <span className="flex flex-wrap gap-2">
+                        {EXPERIENCE_LEVELS.map((level) => (
+                          <TagToggle
+                            key={level}
+                            label={EXPERIENCE_LABELS[level]}
+                            title={EXPERIENCE_HINTS[level]}
+                            selected={entry.level === level}
+                            onClick={() => setLevel(entry.sector, level)}
+                          />
+                        ))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="type-caption text-fg-3">
+                {sectorExperience.length} {sectorExperience.length === 1 ? "sector" : "sectors"} recorded
+              </p>
+            </fieldset>
+
+            <div className="grid gap-x-11 gap-y-6 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+              <Field label="Employment status" hint="What you are doing at the moment." error={errors.employmentStatus}>
+                {({ id, describedBy, invalid }) => (
+                  <Select
+                    id={id}
+                    name="employmentStatus"
+                    aria-describedby={describedBy}
+                    invalid={invalid}
+                    value={answers.employmentStatus ?? ""}
+                    onChange={(e) => set("employmentStatus", e.target.value)}
+                  >
+                    <option value="">Choose…</option>
+                    {EMPLOYMENT_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {EMPLOYMENT_LABELS[status]}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+
+              {/* Only someone who works has a sector to name. */}
+              {worksForPay(answers.employmentStatus) && (
+                <Field label="Sector you work in" hint="The industry of your current work." error={errors.workSector}>
+                  {({ id, describedBy, invalid }) => (
+                    <Select
+                      id={id}
+                      name="workSector"
+                      aria-describedby={describedBy}
+                      invalid={invalid}
+                      value={answers.workSector ?? ""}
+                      onChange={(e) => set("workSector", e.target.value)}
+                    >
+                      <option value="">Choose…</option>
+                      {SECTORS.map((sector) => (
+                        <option key={sector} value={sector}>
+                          {sector}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
             </div>
-            <p className="type-caption text-fg-3">{interests.length} selected</p>
+
           </div>
         )}
 

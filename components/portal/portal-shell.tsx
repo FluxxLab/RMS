@@ -9,8 +9,9 @@ const BROWSE = { href: "/", label: "Studies", icon: <Book /> };
 
 const SIGNED_IN = [
   BROWSE,
+  { href: "/screening", label: "Screening", icon: <Tag /> },
+  { href: "/tasks", label: "Your session", icon: <Book /> },
   { href: "/bookings", label: "Bookings", icon: <Calendar /> },
-  { href: "/interests", label: "Interests", icon: <Tag /> },
   { href: "/profile", label: "Profile", icon: <People /> },
 ];
 

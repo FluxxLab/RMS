@@ -8,7 +8,7 @@ import { fromProfile } from "../screening-schema";
 
 describe("FR-SCR-010 prefilling the screening wizard", () => {
   it("has nothing to offer when no profile is stored", () => {
-    expect(fromProfile(null)).toEqual({ answers: {}, declaredConditions: [] });
+    expect(fromProfile(null)).toEqual({ answers: {}, declaredConditions: [], sectorExperience: [] });
   });
 
   it("renders booleans as the yes/no the wizard asks for", () => {
@@ -22,9 +22,9 @@ describe("FR-SCR-010 prefilling the screening wizard", () => {
   });
 
   it("carries string answers through unchanged", () => {
-    const { answers } = fromProfile({ gender: "prefer not to say", region: "UK" });
+    const { answers } = fromProfile({ gender: "prefer not to say", country: "NG" });
     expect(answers.gender).toBe("prefer not to say");
-    expect(answers.region).toBe("UK");
+    expect(answers.country).toBe("NG");
   });
 
   it("leaves a missing answer absent rather than guessing at one", () => {

@@ -4,11 +4,13 @@ import { ShareChart } from "@/components/dashboard/share-chart";
 import { StackedBarChart } from "@/components/dashboard/stacked-bar-chart";
 import { activeSeries } from "@/components/dashboard/actor-series";
 import { Breadcrumb, PageHeader } from "@/components/fluent";
-import { Book, Calendar, Shield, Tag } from "@/components/icons";
+import { Book, Calendar, People, Shield } from "@/components/icons";
 import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { DataError } from "@/components/ui/data-error";
+import { StudyTable } from "@/components/admin/study-table";
+import { PerformanceChart } from "@/components/dashboard/performance-chart";
 import { studiesByStatus } from "@/lib/audit";
-import { getAdminOverview, getAudit, getPipelineStudies, getSlots, getTaxonomy, pageData } from "@/lib/api";
+import { getAdminOverview, getAudit, getBookings, getPipelineStudies, getSlots, getStudyLog, pageData } from "@/lib/api";
 import { auditByDay, utilisationSeries } from "@/lib/dashboard";
 import { fmtDate } from "@/lib/format";
 import { freePlaces, toSlotRow } from "@/lib/slots";
@@ -28,25 +30,46 @@ const STUDY_LABEL: Record<StudyStatus, string> = {
 
 /** System-wide overview, read entirely as charts. */
 export default async function AdminOverviewPage() {
-  const [overviewResult, studiesResult, slotsResult, taxonomyResult, auditResult] = await Promise.all([
+  const [overviewResult, studiesResult, slotsResult, auditResult, logResult, bookingsResult] = await Promise.all([
     getAdminOverview(),
     getPipelineStudies(),
     getSlots(),
-    getTaxonomy(),
     getAudit({ limit: 200 }),
+    // Per-study counts: the charts say how the lab is doing overall, this says
+    // which study is doing it.
+    getStudyLog(),
+    // Outcomes per study, for how each one is actually performing.
+    getBookings(),
   ]);
 
   const overview = pageData(overviewResult);
   const studies = pageData(studiesResult);
   const slots = pageData(slotsResult);
-  const taxonomy = pageData(taxonomyResult);
   const audit = pageData(auditResult);
+  const log = logResult.ok ? logResult.data : [];
+
 
   if (!overview.ok) return <DataError breadcrumb={CRUMBS} title="System overview" message={overview.message} />;
   if (!studies.ok) return <DataError breadcrumb={CRUMBS} title="System overview" message={studies.message} />;
   if (!slots.ok) return <DataError breadcrumb={CRUMBS} title="System overview" message={slots.message} />;
-  if (!taxonomy.ok) return <DataError breadcrumb={CRUMBS} title="System overview" message={taxonomy.message} />;
   if (!audit.ok) return <DataError breadcrumb={CRUMBS} title="System overview" message={audit.message} />;
+
+  /*
+   * Attendance is counted from the bookings themselves rather than the study
+   * log, because the log counts seats, and a seat says nothing about whether
+   * the person in it turned up.
+   */
+  const bookings = bookingsResult.ok ? bookingsResult.data : [];
+  const performance = studies.data.map((study) => {
+    const mine = bookings.filter((b) => b.studyId === study.id);
+    return {
+      studyId: study.id,
+      title: study.title,
+      irbCode: study.irbCode,
+      attended: mine.filter((b) => b.status === "attended").length,
+      noShows: mine.filter((b) => b.status === "no_show").length,
+    };
+  });
 
   const counts = studiesByStatus(studies.data.map((s) => s.status));
   const sessions = slots.data.map(toSlotRow);
@@ -79,12 +102,16 @@ export default async function AdminOverviewPage() {
         <StatTile icon={<Calendar />} label="Sessions" value={String(sessions.length)} detail="across every study" />
         <StatTile icon={<Shield />} label="Bookings" value={String(overview.data.bookingsRecorded)} detail="reservations in every state" />
         <StatTile
-          icon={<Tag />}
-          label="Interest terms"
-          value={String(taxonomy.data.length)}
-          detail={`${overview.data.staffAccounts} staff ${overview.data.staffAccounts === 1 ? "account" : "accounts"} · ${overview.data.staffWithMfa} with MFA`}
+          icon={<People />}
+          label="Staff accounts"
+          value={String(overview.data.staffAccounts)}
+          detail={`${overview.data.staffWithMfa} with MFA`}
         />
       </StatRow>
+
+      <StudyTable studies={studies.data} log={log} />
+
+      <PerformanceChart studies={performance} />
 
       <OccupancyChart
         title="Capacity utilisation"

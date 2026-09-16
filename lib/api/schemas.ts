@@ -23,7 +23,6 @@ export const DashboardKpis = z.object({
   /** 0–1, or null before any session has elapsed. */
   attendanceRate: z.number().nullable(),
   attendedCount: z.number(),
-  interestLeads: z.number(),
 });
 export type DashboardKpis = z.infer<typeof DashboardKpis>;
 
@@ -52,6 +51,9 @@ export const Study = z.object({
   location: z.string(),
   tags: z.array(z.string()),
   status: StudyStatus,
+  /** Absent on studies created before recruitment existed. */
+  sector: z.string().nullish(),
+  minExperience: z.string().nullish(),
 });
 export type Study = z.infer<typeof Study>;
 
@@ -107,24 +109,75 @@ export const ParticipantRegistry = z.object({ participants: z.array(RegistryPart
  * A term participants can register against. The id is what a retirement is
  * addressed to; the label is what anyone reads.
  */
-export const TaxonomyTag = z.object({
-  id: z.string(),
-  label: z.string(),
-});
-export type TaxonomyTag = z.infer<typeof TaxonomyTag>;
-
 /** The endpoint serves the active terms only: a retired one is simply gone. */
-export const Taxonomy = z.object({ tags: z.array(TaxonomyTag) });
 
 /** A recruitment lead: a pseudonym, the topics it registered, and when. */
-export const InterestLead = z.object({
-  pid: z.string(),
-  tags: z.array(z.string()),
-  updatedAt: Timestamp,
+/** Where screening for one study has got to. */
+export const ScreeningProgress = z.object({
+  matching: z.number(),
+  invited: z.number(),
+  passed: z.number(),
+  failed: z.number(),
+  recruits: z.array(z.string()),
 });
-export type InterestLead = z.infer<typeof InterestLead>;
+export type ScreeningProgress = z.infer<typeof ScreeningProgress>;
 
-export const InterestLeads = z.object({ count: z.number(), leads: z.array(InterestLead) });
+/*
+ * A screener as the participant sees it. The disqualifying flag is deliberately
+ * absent: which answers rule someone out is the study's business, and showing
+ * it would turn the questionnaire into a form with the answers printed on it.
+ */
+export const PendingScreening = z.object({
+  studyId: z.string(),
+  title: z.string(),
+  shortDescription: z.string(),
+  compensation: z.string(),
+  questions: z.array(
+    z.object({
+      id: z.string(),
+      prompt: z.string(),
+      options: z.array(z.object({ id: z.string(), label: z.string() })),
+    }),
+  ),
+});
+export type PendingScreening = z.infer<typeof PendingScreening>;
+export const PendingScreenings = z.object({ screenings: z.array(PendingScreening) });
+
+/* The study itself: what a participant answers during their session. */
+export const TaskQuestion = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  type: z.enum(["single", "text"]),
+  options: z.array(z.object({ id: z.string(), label: z.string() })),
+});
+
+export const OpenTask = z.object({
+  bookingId: z.string(),
+  studyId: z.string(),
+  title: z.string(),
+  shortDescription: z.string(),
+  questions: z.array(TaskQuestion),
+});
+export type OpenTask = z.infer<typeof OpenTask>;
+export const OpenTasks = z.object({ tasks: z.array(OpenTask) });
+
+export const StudyResponses = z.object({
+  questions: z.array(TaskQuestion),
+  responses: z.array(
+    z.object({
+      pid: z.string(),
+      submittedAt: Timestamp,
+      answers: z.array(
+        z.object({
+          questionId: z.string(),
+          optionId: z.string().nullable(),
+          text: z.string().nullable(),
+        }),
+      ),
+    }),
+  ),
+});
+export type StudyResponses = z.infer<typeof StudyResponses>;
 
 export const StaffUser = z.object({
   id: z.string(),
@@ -217,7 +270,6 @@ export const Registration = z.object({
 });
 export type Registration = z.infer<typeof Registration>;
 
-export const MyInterests = z.object({ tags: z.array(z.string()) });
 
 /**
  * Sessions a participant can still book. The study is not repeated on each

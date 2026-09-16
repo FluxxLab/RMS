@@ -16,7 +16,9 @@ import {
   Textarea,
 } from "@/components/fluent";
 import { Add, Dismiss } from "@/components/icons";
-import { CONDITIONS, EDUCATIONS, GENDERS, HANDEDNESS, REGIONS } from "@/lib/screening-schema";
+import { COUNTRY_OPTIONS, HOME_COUNTRY, countryName } from "@/lib/countries";
+import { EXPERIENCE_LABELS, EXPERIENCE_LEVELS, SECTORS } from "@/lib/sectors";
+import { CONDITIONS, EDUCATIONS, GENDERS, HANDEDNESS } from "@/lib/screening-schema";
 
 /** A researcher who can be named as responsible for a study. */
 export interface Researcher {
@@ -38,7 +40,6 @@ const LABEL = {
     masters: "Master's degree",
     doctorate: "Doctorate",
   },
-  region: { US: "United States", CA: "Canada", UK: "United Kingdom", EU: "European Union", AU: "Australia", Other: "Other" },
   handedness: { right: "Right", left: "Left", ambidextrous: "Ambidextrous" },
   condition: {
     "severe food allergy": "Severe food allergy",
@@ -89,6 +90,16 @@ function numberOrUndefined(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+interface ScreenerDraft {
+  id: string;
+  prompt: string;
+  options: { id: string; label: string; disqualifies: boolean }[];
+}
+
+/** Ids only have to be unique within one study, and are never shown. */
+let nextId = 0;
+const freshId = () => `q${++nextId}`;
+
 export function StudyForm({ researchers }: StudyFormProps) {
   const [created, setCreated] = useState<string | null>(null);
   const [result, setResult] = useState<CreateStudyResult | null>(null);
@@ -104,6 +115,50 @@ export function StudyForm({ researchers }: StudyFormProps) {
   const [maxCap, setMaxCap] = useState("40");
   const [location, setLocation] = useState("");
   const [researcherId, setResearcherId] = useState(researchers[0]?.id ?? "");
+  const [assignedStaff, setAssignedStaff] = useState<string[]>([]);
+  const [sector, setSector] = useState("");
+
+  /* Offerable: not already assigned, and not the responsible researcher. */
+  const assignable = researchers.filter((r) => r.id !== researcherId && !assignedStaff.includes(r.id));
+  const nameOf = (id: string) => researchers.find((r) => r.id === id)?.fullName ?? id;
+  const [minExperience, setMinExperience] = useState("");
+  const [screener, setScreener] = useState<ScreenerDraft[]>([]);
+
+  const addQuestion = () =>
+    setScreener((prev) => [
+      ...prev,
+      {
+        id: freshId(),
+        prompt: "",
+        // Two answers is the minimum a question can be answered with.
+        options: [
+          { id: freshId(), label: "", disqualifies: true },
+          { id: freshId(), label: "", disqualifies: false },
+        ],
+      },
+    ]);
+
+  const editQuestion = (qi: number, patch: Partial<ScreenerDraft>) =>
+    setScreener((prev) => prev.map((q, i) => (i === qi ? { ...q, ...patch } : q)));
+
+  const addOption = (qi: number) =>
+    setScreener((prev) =>
+      prev.map((q, i) =>
+        i === qi ? { ...q, options: [...q.options, { id: freshId(), label: "", disqualifies: false }] } : q,
+      ),
+    );
+
+  const editOption = (qi: number, oi: number, patch: Partial<ScreenerDraft["options"][number]>) =>
+    setScreener((prev) =>
+      prev.map((q, i) =>
+        i === qi ? { ...q, options: q.options.map((o, j) => (j === oi ? { ...o, ...patch } : o)) } : q,
+      ),
+    );
+
+  const removeOption = (qi: number, oi: number) =>
+    setScreener((prev) =>
+      prev.map((q, i) => (i === qi ? { ...q, options: q.options.filter((_, j) => j !== oi) } : q)),
+    );
 
   const [tags, setTags] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
@@ -115,7 +170,20 @@ export function StudyForm({ researchers }: StudyFormProps) {
   const [maxAge, setMaxAge] = useState("");
   const [genders, setGenders] = useState<string[]>([]);
   const [minEducation, setMinEducation] = useState("");
-  const [regions, setRegions] = useState<string[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
+  const [countryQuery, setCountryQuery] = useState("");
+
+  /*
+   * The lab's own country leads the list — most studies run domestically, and a
+   * researcher should not type to reach the common case. Everything else stays
+   * alphabetical so the catalogue is scannable.
+   */
+  const countryMatches = (() => {
+    const q = countryQuery.trim().toLowerCase();
+    const matched = q ? COUNTRY_OPTIONS.filter((c) => c.name.toLowerCase().includes(q)) : COUNTRY_OPTIONS;
+    const home = matched.filter((c) => c.code === HOME_COUNTRY);
+    return [...home, ...matched.filter((c) => c.code !== HOME_COUNTRY)];
+  })();
   const [handedness, setHandedness] = useState("");
   const [conditions, setConditions] = useState<string[]>([]);
   const [flags, setFlags] = useState<Set<Flag>>(new Set());
@@ -169,7 +237,7 @@ export function StudyForm({ researchers }: StudyFormProps) {
           maxAge: numberOrUndefined(maxAge),
           allowedGenders: genders.length ? genders : undefined,
           minEducation: minEducation === "" ? undefined : minEducation,
-          allowedRegions: regions.length ? regions : undefined,
+          allowedCountries: countries.length ? countries : undefined,
           requiredHandedness: handedness === "" ? undefined : handedness,
           disallowedConditions: conditions.length ? conditions : undefined,
           cooldownDays: numberOrUndefined(cooldownDays),
@@ -252,7 +320,13 @@ export function StudyForm({ researchers }: StudyFormProps) {
                 aria-describedby={describedBy}
                 invalid={invalid}
                 value={researcherId}
-                onChange={(e) => setResearcherId(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setResearcherId(next);
+                  // The responsible researcher is implied, so they never also
+                  // sit on the assigned list.
+                  setAssignedStaff((prev) => prev.filter((id) => id !== next));
+                }}
               >
                 {researchers.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -262,6 +336,106 @@ export function StudyForm({ researchers }: StudyFormProps) {
               </Select>
             )}
           </Field>
+          <Field
+            label="Recruiting sector"
+            hint="Participants who said they would sit a study in this sector are the ones offered it."
+            error={errors.sector}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Select
+                id={id}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+              >
+                <option value="">Choose…</option>
+                {SECTORS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
+          <Field
+            label="Minimum experience"
+            hint="Someone below this is never asked to screen. Leave unset to accept any level."
+            error={errors.minExperience}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Select
+                id={id}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                value={minExperience}
+                onChange={(e) => setMinExperience(e.target.value)}
+              >
+                <option value="">Any level</option>
+                {EXPERIENCE_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {EXPERIENCE_LABELS[level]}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+
+          {/* Everyone else who may see and run this study. The responsible
+              researcher is implied and so is not offered here. */}
+          <Field
+            label="Assigned staff"
+            hint="Research assistants and co-investigators who may see this study."
+            error={errors.assignedStaff}
+          >
+            {({ id, describedBy, invalid }) => (
+              <div className="flex flex-col gap-2">
+                {/*
+                  * Choosing adds; the list below is what is chosen. The select
+                  * offers only people not already on it, so it never shows a
+                  * name that would do nothing, and never the responsible
+                  * researcher, who is implied by the study itself.
+                  */}
+                <Select
+                  id={id}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  value=""
+                  disabled={assignable.length === 0}
+                  onChange={(e) => {
+                    if (e.target.value) setAssignedStaff([...assignedStaff, e.target.value]);
+                  }}
+                >
+                  <option value="">
+                    {assignable.length === 0 ? "Everyone is assigned" : "Add someone…"}
+                  </option>
+                  {assignable.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.fullName}
+                    </option>
+                  ))}
+                </Select>
+
+                {assignedStaff.length > 0 && (
+                  <ul className="flex flex-wrap gap-2">
+                    {assignedStaff.map((staffId) => (
+                      <li key={staffId}>
+                        <TagToggle
+                          label={nameOf(staffId)}
+                          selected
+                          icon={<Dismiss />}
+                          aria-label={`Remove ${nameOf(staffId)}`}
+                          onClick={() => setAssignedStaff(assignedStaff.filter((x) => x !== staffId))}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </Field>
+
           <Field label="Room" error={errors.location}>
             {({ id, describedBy, invalid }) => (
               <Input
@@ -558,18 +732,138 @@ export function StudyForm({ researchers }: StudyFormProps) {
         </fieldset>
 
         <fieldset className="mt-6 flex flex-col gap-3">
-          <legend className="mb-1 text-[16px] font-medium leading-[19px] text-fg-1">Region of residence</legend>
-          <p className="-mt-1 text-[14px] leading-[17px] text-field-label">Leave all unticked to accept any.</p>
-          <div className="flex flex-wrap gap-2">
-            {REGIONS.map((value) => (
-              <TagToggle
-                key={value}
-                label={LABEL.region[value]}
-                selected={regions.includes(value)}
-                onClick={() => setRegions(toggle(regions, value))}
-              />
-            ))}
+          <legend className="mb-1 text-[16px] font-medium leading-[19px] text-fg-1">Country of residence</legend>
+          <p className="-mt-1 text-[14px] leading-[17px] text-field-label">Leave none chosen to accept any.</p>
+
+          {countries.length > 0 && (
+            <ul className="flex flex-wrap gap-2">
+              {countries.map((code) => (
+                <li key={code}>
+                  <TagToggle
+                    label={countryName(code)}
+                    selected
+                    icon={<Dismiss />}
+                    aria-label={`Remove ${countryName(code)}`}
+                    onClick={() => setCountries(countries.filter((c) => c !== code))}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Input
+            type="search"
+            value={countryQuery}
+            onChange={(e) => setCountryQuery(e.target.value)}
+            placeholder="Search countries"
+            aria-label="Search countries"
+          />
+
+          {/* The catalogue is long, so it scrolls in place rather than pushing
+              the rest of the rule set off the screen. */}
+          <div className="max-h-64 overflow-y-auto rounded-sm border border-stroke-1 px-3">
+            {countryMatches.length === 0 ? (
+              <p className="py-3 text-[14px] leading-[17px] text-field-label">No country matches that search.</p>
+            ) : (
+              <ul>
+                {countryMatches.map((c) => (
+                  <li key={c.code}>
+                    <Checkbox
+                      label={c.name}
+                      checked={countries.includes(c.code)}
+                      onChange={() => setCountries(toggle(countries, c.code))}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        </fieldset>
+
+        {/*
+          * The screener, stage two of recruitment.
+          *
+          * Experience decides who is asked; these decide who is in. Ticking an
+          * answer means "someone who says this is not suitable", which is the
+          * whole rule — no scores, no thresholds, just the answers that end it.
+          */}
+        <fieldset className="mt-6 flex flex-col gap-3">
+          <legend className="mb-1 text-[16px] font-medium leading-[19px] text-fg-1">Screening questions</legend>
+          <p className="-mt-1 text-[14px] leading-[17px] text-field-label">
+            Asked of everyone whose experience matches. Tick the answers that rule someone out.
+          </p>
+
+          {screener.length === 0 && (
+            <p className="type-body text-fg-3">
+              No questions yet. Without them, everyone who matches on experience passes.
+            </p>
+          )}
+
+          <ul className="flex flex-col gap-5">
+            {screener.map((question, qi) => (
+              <li key={question.id} className="flex flex-col gap-3 rounded-lg border border-stroke-2 p-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field label={`Question ${qi + 1}`} className="min-w-[260px] flex-1">
+                    {({ id }) => (
+                      <Input
+                        id={id}
+                        value={question.prompt}
+                        placeholder="What is your experience with AI?"
+                        onChange={(e) => editQuestion(qi, { prompt: e.target.value })}
+                      />
+                    )}
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    aria-label={`Remove question ${qi + 1}`}
+                    icon={<Dismiss />}
+                    onClick={() => setScreener((prev) => prev.filter((_, i) => i !== qi))}
+                  />
+                </div>
+
+                <ul className="flex flex-col gap-2">
+                  {question.options.map((option, oi) => (
+                    <li key={option.id} className="flex flex-wrap items-center gap-3">
+                      <Input
+                        aria-label={`Answer ${oi + 1} of question ${qi + 1}`}
+                        className="min-w-[200px] flex-1"
+                        value={option.label}
+                        placeholder={oi === 0 ? "1 — none" : "4 — build with it"}
+                        onChange={(e) => editOption(qi, oi, { label: e.target.value })}
+                      />
+                      <Checkbox
+                        label="Rules them out"
+                        checked={option.disqualifies}
+                        onChange={() => editOption(qi, oi, { disqualifies: !option.disqualifies })}
+                      />
+                      {question.options.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          aria-label={`Remove answer ${oi + 1}`}
+                          icon={<Dismiss />}
+                          onClick={() => removeOption(qi, oi)}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+
+                <span>
+                  <Button type="button" variant="secondary" icon={<Add />} onClick={() => addOption(qi)}>
+                    Add answer
+                  </Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <span>
+            <Button type="button" variant="secondary" icon={<Add />} onClick={addQuestion}>
+              Add question
+            </Button>
+          </span>
         </fieldset>
 
         <fieldset className="mt-6 flex flex-col gap-3">

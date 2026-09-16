@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Badge, Breadcrumb, Card, CardHeader, MessageBar, PageHeader, type BadgeTone } from "@/components/fluent";
+import { Badge, Breadcrumb, ButtonLink, Card, CardHeader, MessageBar, PageHeader, type BadgeTone } from "@/components/fluent";
 import { Calendar, CheckmarkCircle, Clock, Money } from "@/components/icons";
 import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { DataError } from "@/components/ui/data-error";
-import { getPipelineStudies, getSlots, getStudy, getStudyLog, pageData } from "@/lib/api";
+import { getBookings, getPipelineStudies, getSlots, getStudy, getStudyLog, getStudyResponses, pageData } from "@/lib/api";
 import { fmtDate, fmtRange } from "@/lib/format";
 import { serverNow } from "@/lib/now";
 import { freePlaces, toSlotRow } from "@/lib/slots";
-import type { ScheduleStatus, StudyStatus } from "@/lib/types";
+import type { BookingStatus, ScheduleStatus, StudyStatus } from "@/lib/types";
 
 const STUDY_STATUS: Record<StudyStatus, { label: string; tone: BadgeTone }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -16,6 +16,13 @@ const STUDY_STATUS: Record<StudyStatus, { label: string; tone: BadgeTone }> = {
   active: { label: "Active", tone: "success" },
   paused: { label: "Paused", tone: "neutral" },
   completed: { label: "Completed", tone: "informative" },
+};
+
+const BOOKING_STATUS: Record<BookingStatus, { label: string; tone: BadgeTone }> = {
+  booked: { label: "Booked", tone: "brand" },
+  attended: { label: "Attended", tone: "success" },
+  no_show: { label: "No-show", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
 
 const SESSION_STATUS: Record<ScheduleStatus, { label: string; tone: BadgeTone }> = {
@@ -40,7 +47,7 @@ export async function generateMetadata({ params }: PageProps<"/staff/studies/[st
 export default async function StaffStudyPage({ params }: PageProps<"/staff/studies/[studyId]">) {
   const { studyId } = await params;
 
-  const [studiesResult, logResult, slotsResult, detailResult] = await Promise.all([
+  const [studiesResult, logResult, slotsResult, detailResult, bookingsResult, responsesResult] = await Promise.all([
     getPipelineStudies(),
     getStudyLog(),
     getSlots(),
@@ -48,6 +55,11 @@ export default async function StaffStudyPage({ params }: PageProps<"/staff/studi
     // none — the page shows what the pipeline knows and says the rest is
     // written but not published yet.
     getStudy(studyId),
+    // Who is actually coming. A count tells you the room is filling; it does not
+    // tell you who to expect, which is what running the session needs.
+    getBookings({ studyId }),
+    // What each of them produced in the session.
+    getStudyResponses(studyId),
   ]);
   const studies = pageData(studiesResult);
   const log = pageData(logResult);
@@ -56,6 +68,15 @@ export default async function StaffStudyPage({ params }: PageProps<"/staff/studi
   if (!studies.ok) return <DataError breadcrumb={CRUMBS} title="Study" message={studies.message} />;
   if (!log.ok) return <DataError breadcrumb={CRUMBS} title="Study" message={log.message} />;
   if (!slots.ok) return <DataError breadcrumb={CRUMBS} title="Study" message={slots.message} />;
+
+  /*
+   * A booking names its schedule, not its time, so the session is looked up to
+   * turn an id into something a person can act on. An unreadable ledger is not
+   * an empty one: it fails quietly here because the rest of the page is still
+   * worth showing.
+   */
+  const bookings = bookingsResult.ok ? bookingsResult.data : [];
+  const responses = responsesResult.ok ? responsesResult.data : null;
 
   const study = studies.data.find((s) => s.id === studyId);
   if (!study) notFound();
@@ -195,6 +216,97 @@ export default async function StaffStudyPage({ params }: PageProps<"/staff/studi
           </ol>
         </Card>
       )}
+
+      {responses && responses.questions.length > 0 && (
+        <Card padding="none">
+          <CardHeader
+            title="Responses"
+            description="What each participant answered in their session"
+            className="px-4 pb-4 pt-5"
+            action={
+              responses.responses.length > 0 ? (
+                <ButtonLink href={`/api/studies/${studyId}/responses/export`} variant="secondary" size="sm">
+                  Export CSV
+                </ButtonLink>
+              ) : undefined
+            }
+          />
+          {responses.responses.length === 0 ? (
+            <p className="border-t border-stroke-2 px-4 py-8 text-[16px] leading-[22px] text-fg-2">
+              No answers yet. They appear here as sessions are sat.
+            </p>
+          ) : (
+            <ul className="border-t border-stroke-2">
+              {responses.responses.map((response) => (
+                <li key={response.pid} className="border-b border-stroke-3 px-4 py-4 last:border-b-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-3">
+                    <span className="text-[14px] leading-[20px] text-fg-1">{response.pid}</span>
+                    <span className="type-caption text-fg-3">{fmtDate(response.submittedAt)}</span>
+                  </div>
+                  <dl className="mt-2 flex flex-col gap-1">
+                    {responses.questions.map((question) => {
+                      const answer = response.answers.find((a) => a.questionId === question.id);
+                      const given =
+                        answer?.text ??
+                        question.options.find((o) => o.id === answer?.optionId)?.label ??
+                        "—";
+                      return (
+                        <div key={question.id} className="flex flex-wrap gap-x-3">
+                          <dt className="text-[14px] leading-[20px] text-field-label">{question.prompt}</dt>
+                          <dd className="text-[14px] leading-[20px] text-fg-1">{given}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
+      <Card padding="none">
+        <CardHeader
+          title="Participants"
+          description="Booked on this study, by pseudonym"
+          className="px-4 pb-4 pt-5"
+        />
+        {bookings.length === 0 ? (
+          <p className="border-t border-stroke-2 px-4 py-8 text-[16px] leading-[22px] text-fg-2">
+            {bookingsResult.ok
+              ? "Nobody has booked yet. Reservations appear here as they are made."
+              : "The bookings ledger could not be read just now."}
+          </p>
+        ) : (
+          <ul className="border-t border-stroke-2">
+            {bookings.map((booking) => {
+              const session = sessions.find((s) => s.id === booking.scheduleId);
+              return (
+                <li
+                  key={booking.id}
+                  className="flex flex-wrap items-center gap-3 border-b border-stroke-3 px-4 py-3 last:border-b-0"
+                >
+                  <span className="w-48 shrink-0 text-[14px] leading-[20px] text-fg-1">
+                    {booking.participantPid}
+                  </span>
+                  <span className="w-28 shrink-0 text-[14px] leading-[20px] text-field-label">
+                    {session ? fmtDate(session.start) : "—"}
+                  </span>
+                  <span className="w-32 shrink-0 tabular-nums text-[14px] leading-[20px] text-field-label">
+                    {session ? fmtRange(session.start, session.end) : ""}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[14px] leading-[20px] text-field-label">
+                    {session?.location ?? ""}
+                  </span>
+                  <Badge tone={BOOKING_STATUS[booking.status].tone} size="sm">
+                    {BOOKING_STATUS[booking.status].label}
+                  </Badge>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
 
       <Card padding="none">
         <CardHeader title="Sessions" description="Occupancy against capacity" className="px-4 pb-4 pt-5" />

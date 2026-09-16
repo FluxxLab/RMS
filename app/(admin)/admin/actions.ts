@@ -69,6 +69,43 @@ export async function changeStudyStatus(studyId: string, next: StudyStatus): Pro
   ]);
 }
 
+/** Everything that shows a session, so a change to one is not stale anywhere. */
+const SCHEDULE_VIEWS = [
+  "/admin/schedules",
+  "/admin",
+  "/staff/slots",
+  "/staff/bookings",
+  "/staff/dashboard",
+  "/",
+];
+
+export async function createSession(input: api.SessionInput): Promise<AdminResult> {
+  return settle(await api.createSchedule(input), "Session added.", SCHEDULE_VIEWS);
+}
+
+/**
+ * Only what changed is sent, and the caller decides what that is: a start on
+ * its own means "move it and keep its length", which is not the same request
+ * as a start and an unchanged end.
+ */
+export async function editSession(
+  scheduleId: string,
+  changes: Partial<Omit<api.SessionInput, "studyId">>,
+): Promise<AdminResult> {
+  if (Object.keys(changes).length === 0) return { ok: true, message: "Nothing changed." };
+
+  return settle(await api.updateSchedule(scheduleId, changes), "Session updated.", SCHEDULE_VIEWS);
+}
+
+/**
+ * The API refuses this for any session someone has ever booked, and says to
+ * cancel instead. That refusal is the message the operator sees — it is more
+ * use than anything this layer could substitute for it.
+ */
+export async function deleteSession(scheduleId: string): Promise<AdminResult> {
+  return settle(await api.deleteSchedule(scheduleId), "Session deleted.", SCHEDULE_VIEWS);
+}
+
 export async function cancelSession(scheduleId: string): Promise<AdminResult> {
   return settle(await api.cancelSchedule(scheduleId), "Session cancelled and its places released.", [
     "/admin/schedules",
@@ -91,23 +128,6 @@ export async function setBookingStatus(bookingId: string, next: BookingStatus): 
   return settle(result, "Booking updated.", ["/staff/bookings", "/staff/dashboard", "/staff/participants", "/admin"]);
 }
 
-export async function addTerm(label: string): Promise<AdminResult> {
-  const trimmed = label.trim();
-  if (trimmed.length < 2) return { ok: false, message: "A term needs at least two characters." };
-  return settle(await api.addTaxonomyTag(trimmed), `"${trimmed}" added to the taxonomy.`, [
-    "/admin/taxonomy",
-    "/interests",
-    "/signup",
-  ]);
-}
-
-export async function retireTerm(tagId: string, label: string): Promise<AdminResult> {
-  return settle(await api.retireTaxonomyTag(tagId), `"${label}" retired. Leads that already carry it keep it.`, [
-    "/admin/taxonomy",
-    "/interests",
-    "/signup",
-  ]);
-}
 
 export async function invite(
   fullName: string,

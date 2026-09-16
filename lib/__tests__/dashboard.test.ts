@@ -22,7 +22,6 @@ const REPORTED: ReportedKpis = {
   pendingCheckIns: 1,
   attendanceRate: 0.5,
   attendedCount: 1,
-  interestLeads: 3,
 };
 
 describe("FR-OPS-010 operations KPIs", () => {
@@ -37,9 +36,7 @@ describe("FR-OPS-010 operations KPIs", () => {
     slot({ id: "s4", start: "2026-08-28T11:00:00", end: "2026-08-28T11:30:00", status: "cancelled" }),
   ];
 
-  const leads = [{ updatedAt: "2026-08-27T07:00:00" }, { updatedAt: "2026-08-20T07:00:00" }];
-
-  const kpis = dashboardKpis(REPORTED, slots, leads, NOW);
+  const kpis = dashboardKpis(REPORTED, slots, NOW);
 
   it("passes the engine's headline counts through unchanged", () => {
     expect(kpis).toMatchObject({
@@ -48,7 +45,6 @@ describe("FR-OPS-010 operations KPIs", () => {
       pendingCheckIns: 1,
       attendanceRate: 0.5,
       attendedCount: 1,
-      interestLeads: 3,
     });
   });
 
@@ -67,12 +63,8 @@ describe("FR-OPS-010 operations KPIs", () => {
     expect(kpis.upcomingSchedules).toBe(2);
   });
 
-  it("counts leads changed today", () => {
-    expect(kpis.interestLeadsToday).toBe(1);
-  });
-
   it("reports no attendance rate before a session has elapsed", () => {
-    expect(dashboardKpis({ ...REPORTED, attendanceRate: null }, [], [], NOW).attendanceRate).toBeNull();
+    expect(dashboardKpis({ ...REPORTED, attendanceRate: null }, [], NOW).attendanceRate).toBeNull();
   });
 
   it("lists today's sessions in the order they run", () => {

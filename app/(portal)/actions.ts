@@ -62,29 +62,15 @@ export async function cancelBooking(bookingId: string): Promise<BookingOutcome> 
   );
 }
 
-export async function saveInterests(tags: string[]): Promise<{ ok: boolean; message: string }> {
-  const clean = tags.filter((tag, i, all) => typeof tag === "string" && all.indexOf(tag) === i);
-  if (clean.length === 0) return { ok: false, message: "Choose at least one topic." };
-
-  const result = await api.saveInterests(clean);
-  if (!result.ok) return { ok: false, message: apiMessage(result.error) };
-
-  for (const path of ["/interests", "/staff/interests", "/staff/participants"]) revalidatePath(path);
-  return { ok: true, message: "Your interests are saved. Researchers see them against your pseudonym only." };
-}
 
 export type RegistrationOutcome = { ok: true; pid: string } | { ok: false; message: string };
 
 const INVALID = "Some answers are missing or invalid. Please check each step and try again.";
 
 /** Writes the screening answers and the interests behind the current session. */
-async function storeAnswers(profile: Record<string, unknown>, interests: string[]): Promise<string | null> {
+async function storeAnswers(profile: Record<string, unknown>): Promise<string | null> {
   const saved = await api.saveProfile(profile);
   if (!saved.ok) return apiMessage(saved.error);
-
-  // Interests are replaced wholesale, so an empty list is a deliberate clearing.
-  const tags = await api.saveInterests(interests);
-  if (!tags.ok) return apiMessage(tags.error);
 
   return null;
 }
@@ -102,8 +88,7 @@ export async function updateScreening(input: unknown): Promise<RegistrationOutco
   const parsed = profileSubmissionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: INVALID };
 
-  const { interests, ...answers } = parsed.data;
-  const failure = await storeAnswers(toProfile({ ...answers, interests }), interests);
+  const failure = await storeAnswers(toProfile(parsed.data));
   if (failure !== null) return { ok: false, message: failure };
 
   revalidatePath("/", "layout");
@@ -123,9 +108,21 @@ export async function saveScreening(input: unknown): Promise<RegistrationOutcome
     return { ok: false, message: INVALID };
   }
 
-  const { fullName, email, password, interests, ...rest } = parsed.data;
+  const { fullName, email, password, phone, nin, addressLine, ...rest } = parsed.data;
 
-  const registration = await api.registerParticipant({ fullName, email, password });
+  /*
+   * The vault write. `rest` carries the screening answers and deliberately no
+   * longer holds these: a NIN, a phone number or an address beside the
+   * pseudonymous profile is exactly what the database validators refuse.
+   */
+  const registration = await api.registerParticipant({
+    fullName,
+    email,
+    password,
+    phone: phone || undefined,
+    nin: nin || undefined,
+    addressLine: addressLine || undefined,
+  });
   if (!registration.ok) return { ok: false, message: apiMessage(registration.error) };
 
   const session = await api.participantLogin(email, password);
@@ -142,7 +139,7 @@ export async function saveScreening(input: unknown): Promise<RegistrationOutcome
 
   // The contact fields stop here: they went to the vault above and have no
   // place in the profile the pseudonym carries.
-  const failure = await storeAnswers(toProfile({ ...rest, interests }), interests);
+  const failure = await storeAnswers(toProfile(rest));
   if (failure !== null) return { ok: false, message: failure };
 
   revalidatePath("/", "layout");

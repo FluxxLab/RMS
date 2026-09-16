@@ -13,7 +13,7 @@ const CRUMBS = [{ label: "Studies", href: "/" }, { label: "My bookings" }];
 export default async function MyBookingsPage() {
   if (!isParticipant(await readSession())) redirect("/sign-in?next=/bookings");
 
-  const result = pageData(await getMyBookings());
+  const result = pageData(await getMyBookings(), "/sign-in");
   if (!result.ok) return <DataError breadcrumb={CRUMBS} title="My bookings" message={result.message} />;
 
   return (

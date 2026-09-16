@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { Dismiss } from "@/components/icons";
 import { Button } from "./button";
 
@@ -16,6 +16,9 @@ interface DialogProps {
 /** Modal dialog on the native <dialog> element: focus-trapped, Esc to close, 40 % scrim. */
 export function Dialog({ open, onClose, title, children, actions }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  /* Without this the dialog announces as an unnamed one, and a screen reader
+     lands inside it with nothing said about what it is for. */
+  const titleId = useId();
 
   useEffect(() => {
     const el = ref.current;
@@ -27,6 +30,7 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
@@ -35,7 +39,9 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
     >
       <div className="flex flex-col gap-5 p-6">
         <div className="flex items-start justify-between gap-4">
-          <h2 className="type-title-3 text-heading-ink">{title}</h2>
+          <h2 id={titleId} className="type-title-3 text-heading-ink">
+            {title}
+          </h2>
           <Button variant="subtle" size="sm" aria-label="Close" onClick={onClose} icon={<Dismiss />} className="-mr-2 -mt-1" />
         </div>
         <div className="text-[16px] leading-[24px] text-fg-2">{children}</div>

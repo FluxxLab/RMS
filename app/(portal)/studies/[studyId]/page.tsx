@@ -42,7 +42,7 @@ export default async function StudyPage({ params }: PageProps<"/studies/[studyId
   const result = await getStudy(studyId);
   if (!result.ok && result.error.kind === "not_found") notFound();
 
-  const detail = pageData(result);
+  const detail = pageData(result, "/sign-in");
   if (!detail.ok) return <DataError breadcrumb={CRUMBS} title="Study" message={detail.message} />;
 
   const study = detail.data;

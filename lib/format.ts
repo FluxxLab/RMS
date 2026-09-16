@@ -112,3 +112,48 @@ export function listStamp(iso: string, now: string): string {
 export function pidShort(pid: string): string {
   return pid.split("/").at(-1) ?? pid;
 }
+
+/*
+ * The other direction: a timestamp into the two values a form edits, and back.
+ *
+ * Everything above renders in the lab's zone, so the form has to read and
+ * write in it too. Going through the machine's local zone instead — which is
+ * what `<input type="datetime-local">` does on its own — would show an
+ * operator in Lagos a different time than the table beside it once the lab's
+ * offset is anything but zero.
+ */
+
+/** The date part, as `<input type="date">` wants it. */
+export function dateInputValue(iso: string): string {
+  const p = labParts(iso);
+  return `${p.year}-${pad(p.month + 1)}-${pad(p.day)}`;
+}
+
+/** The clock part, as `<input type="time">` wants it. */
+export function timeInputValue(iso: string): string {
+  const p = labParts(iso);
+  return `${pad(p.hours)}:${pad(p.minutes)}`;
+}
+
+/** Minutes between two timestamps, which is how a form asks for a duration. */
+export function minutesBetween(startIso: string, endIso: string): number {
+  return Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60_000);
+}
+
+/**
+ * A date and a clock reading, both lab time, as the UTC instant the API stores.
+ * Returns null rather than an Invalid Date when either box is empty or partial.
+ */
+export function fromDateTimeInputs(date: string, time: string): string | null {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const t = /^(\d{2}):(\d{2})/.exec(time);
+  if (!d || !t) return null;
+
+  const at = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2]) - LAB_UTC_OFFSET_MINUTES * 60_000;
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
+}
+
+/** That instant, moved on by a number of minutes. */
+export function plusMinutes(iso: string, minutes: number): string {
+  return new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
+}

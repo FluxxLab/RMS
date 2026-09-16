@@ -53,16 +53,52 @@ export function getPipelineStudies(): Promise<ApiResult<S.Study[]>> {
   return apiRequest("/ops/studies", S.Studies);
 }
 
-/* ---------- Interests ---------- */
+/* ---------- Screening and tasks ---------- */
 
-export async function getTaxonomy(): Promise<ApiResult<S.TaxonomyTag[]>> {
-  const result = await apiRequest("/taxonomy", S.Taxonomy);
-  return result.ok ? { ok: true, data: result.data.tags } : result;
+/** Invite everyone whose experience matches. Safe to run again. */
+export function inviteToScreen(studyId: string): Promise<ApiResult<S.ScreeningProgress>> {
+  return apiRequest(`/studies/${studyId}/screening/invite`, S.ScreeningProgress, { method: "POST" });
 }
 
-export async function getInterestLeads(tag?: string): Promise<ApiResult<S.InterestLead[]>> {
-  const result = await apiRequest("/interests/leads", S.InterestLeads, { query: { tag } });
-  return result.ok ? { ok: true, data: result.data.leads } : result;
+export function getScreeningProgress(studyId: string): Promise<ApiResult<S.ScreeningProgress>> {
+  return apiRequest(`/studies/${studyId}/screening`, S.ScreeningProgress);
+}
+
+/** The screeners waiting on the signed-in participant. */
+export async function getMyScreenings(): Promise<ApiResult<S.PendingScreening[]>> {
+  const result = await apiRequest("/participants/me/screenings", S.PendingScreenings);
+  return result.ok ? { ok: true, data: result.data.screenings } : result;
+}
+
+export function submitScreening(
+  studyId: string,
+  answers: { questionId: string; optionId: string }[],
+) {
+  return apiRequest(`/participants/me/screenings/${studyId}`, z.object({ status: z.string() }), {
+    method: "POST",
+    body: { answers },
+  });
+}
+
+/** The study tasks open to the signed-in participant right now. */
+export async function getMyTasks(): Promise<ApiResult<S.OpenTask[]>> {
+  const result = await apiRequest("/participants/me/tasks", S.OpenTasks);
+  return result.ok ? { ok: true, data: result.data.tasks } : result;
+}
+
+export function submitTask(
+  bookingId: string,
+  answers: { questionId: string; optionId?: string; text?: string }[],
+) {
+  return apiRequest(`/participants/me/tasks/${bookingId}`, z.object({ submitted: z.boolean() }), {
+    method: "POST",
+    body: { answers },
+  });
+}
+
+/** Everything participants answered for one study. */
+export function getStudyResponses(studyId: string): Promise<ApiResult<S.StudyResponses>> {
+  return apiRequest(`/studies/${studyId}/responses`, S.StudyResponses);
 }
 
 /* ---------- Staff and audit ---------- */
@@ -106,11 +142,6 @@ export function getMyProfile(): Promise<ApiResult<S.MyProfile>> {
   return apiRequest("/participants/me/profile", S.MyProfile);
 }
 
-export async function getMyInterests(): Promise<ApiResult<string[]>> {
-  const result = await apiRequest("/participants/me/interests", z.object({ tags: z.array(z.string()) }));
-  return result.ok ? { ok: true, data: result.data.tags } : result;
-}
-
 export function getScorecard(studyId: string): Promise<ApiResult<S.Scorecard>> {
   return apiRequest(`/studies/${studyId}/eligibility`, S.Scorecard);
 }
@@ -120,16 +151,24 @@ export async function getBookableSessions(studyId: string): Promise<ApiResult<S.
   return result.ok ? { ok: true, data: result.data.schedules } : result;
 }
 
-export function registerParticipant(input: { fullName: string; email: string; password: string }) {
+/*
+ * Registration is the one call that carries identifying data, and the only one
+ * that may: every field here lands in the vault. The NIN is encrypted there and
+ * read back by nothing — it is sent once and never returned.
+ */
+export function registerParticipant(input: {
+  fullName: string;
+  email: string;
+  password: string;
+  phone?: string;
+  nin?: string;
+  addressLine?: string;
+}) {
   return apiRequest("/participants", S.Registration, { method: "POST", body: input });
 }
 
 export function saveProfile(profile: Record<string, unknown>) {
   return apiRequest("/participants/me/profile", z.unknown(), { method: "PUT", body: profile });
-}
-
-export function saveInterests(tags: string[]) {
-  return apiRequest("/participants/me/interests", z.unknown(), { method: "PUT", body: { tags } });
 }
 
 /**
@@ -209,6 +248,34 @@ export function cancelSchedule(scheduleId: string) {
   return apiRequest(`/schedules/${scheduleId}/cancel`, Acknowledged, { method: "POST" });
 }
 
+/** One session, at a time somebody chose, rather than a grid of them. */
+export interface SessionInput {
+  studyId: string;
+  /** ISO 8601, UTC. */
+  start: string;
+  end: string;
+  location: string;
+  maxCapacity: number;
+}
+
+export function createSchedule(input: SessionInput) {
+  return apiRequest("/schedules", Acknowledged, { method: "POST", body: input });
+}
+
+/**
+ * Only the fields that changed are sent. The API takes a start on its own as
+ * "move it, keep its length", so sending an unchanged end alongside would be a
+ * different request than the one meant.
+ */
+export function updateSchedule(scheduleId: string, changes: Partial<Omit<SessionInput, "studyId">>) {
+  return apiRequest(`/schedules/${scheduleId}`, Acknowledged, { method: "PATCH", body: changes });
+}
+
+/** Refused by the API for any session a participant has ever booked. */
+export function deleteSchedule(scheduleId: string) {
+  return apiRequest(`/schedules/${scheduleId}`, Acknowledged, { method: "DELETE" });
+}
+
 /**
  * Fires six concurrent reservations at one session and reports what the engine
  * did. Anything it books is released again, so the test can be run on a live
@@ -218,15 +285,7 @@ export function stressTestSlot(scheduleId: string): Promise<ApiResult<S.StressTe
   return apiRequest(`/bookings/${scheduleId}/stress-test`, S.StressTestResult, { method: "POST", body: {} });
 }
 
-export function addTaxonomyTag(label: string) {
-  return apiRequest("/taxonomy", Acknowledged, { method: "POST", body: { label } });
-}
-
 /** Retiring hides a term from the portal; leads that already carry it keep it. */
-export function retireTaxonomyTag(tagId: string) {
-  return apiRequest(`/taxonomy/${tagId}/retire`, Acknowledged, { method: "PATCH" });
-}
-
 export interface StaffInvite {
   fullName: string;
   email: string;

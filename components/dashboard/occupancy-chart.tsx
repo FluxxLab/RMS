@@ -22,7 +22,21 @@ const AXIS = "text-[12px] leading-[9px] text-[rgba(43,48,52,0.72)]";
  * area — you should not have to hit the dot exactly to read its value. */
 const HIT = "group absolute -translate-x-1/2 -translate-y-1/2 before:absolute before:-inset-3 before:content-['']";
 const TOOLTIP =
-  "pointer-events-none absolute bottom-full left-1/2 z-10 mb-3 -translate-x-1/2 whitespace-nowrap rounded-[2px] bg-brand-ink px-2 py-1 text-[12px] leading-[16px] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100";
+  "pointer-events-none absolute bottom-full z-10 mb-3 whitespace-nowrap rounded-[2px] bg-brand-ink px-2 py-1 text-[12px] leading-[16px] text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100";
+
+/*
+ * Where the tooltip sits relative to its point.
+ *
+ * Centred everywhere except the ends. A centred label on the first or last
+ * point hangs half its width outside the plot, and an absolutely positioned
+ * element still counts towards the page's scroll width — so the chart quietly
+ * gave the whole page a horizontal scrollbar. The ends anchor inwards instead.
+ */
+function tooltipAnchor(index: number, count: number): string {
+  if (count > 1 && index === 0) return "left-0";
+  if (count > 1 && index === count - 1) return "right-0";
+  return "left-1/2 -translate-x-1/2";
+}
 
 export interface ChartPoint {
   /** X-axis tick — a time, a date. */
@@ -96,7 +110,7 @@ export function OccupancyChart({ title, period, points, emptyHint }: OccupancyCh
               {points.map((p, i) => (
                 <span key={p.label} className={HIT} style={{ left: `${atX(i, count)}%`, top: `${atY(p.pct)}%` }}>
                   <span className={`block rounded-full bg-brand ${i === peak ? "size-2.5" : "size-1.5"}`} />
-                  <span className={TOOLTIP}>
+                  <span className={`${TOOLTIP} ${tooltipAnchor(i, count)}`}>
                     {p.label} · {Math.round(p.pct)}% · {p.caption}
                   </span>
                 </span>

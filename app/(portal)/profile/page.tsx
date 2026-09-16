@@ -3,7 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Badge, Breadcrumb, MessageBar, Persona } from "@/components/fluent";
 import { DataError } from "@/components/ui/data-error";
-import { getMyBookings, getMyInterests, getMyProfile, isParticipant, pageData, readSession } from "@/lib/api";
+import { getMyBookings, getMyProfile, isParticipant, pageData, readSession } from "@/lib/api";
+import { countryName } from "@/lib/countries";
+import {
+  EMPLOYMENT_LABELS,
+  EXPERIENCE_LABELS,
+  type EmploymentStatus,
+  type ExperienceLevel,
+} from "@/lib/sectors";
 import { fmtDate } from "@/lib/format";
 import { serverNow } from "@/lib/now";
 
@@ -16,8 +23,26 @@ function read(profile: Record<string, unknown>, key: string): string | null {
   const value = profile[key];
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return String(value);
-  if (typeof value === "string" && value !== "") return value.replace(/^\w/, (c) => c.toUpperCase());
-  return null;
+  if (Array.isArray(value)) {
+    // Sector experience is a list of {sector, level}; everything else is strings.
+    const experience = value.filter(
+      (v): v is { sector: string; level: string } =>
+        typeof v === "object" && v !== null && "sector" in v && "level" in v,
+    );
+    if (experience.length) {
+      return experience
+        .map((e) => `${e.sector} (${EXPERIENCE_LABELS[e.level as ExperienceLevel] ?? e.level})`)
+        .join(", ");
+    }
+
+    const items = value.filter((v): v is string => typeof v === "string");
+    return items.length ? items.join(", ") : null;
+  }
+  if (typeof value !== "string" || value === "") return null;
+  // Country is stored as an ISO code; the participant answered with a name.
+  if (key === "country") return countryName(value);
+  if (key === "employmentStatus") return EMPLOYMENT_LABELS[value as EmploymentStatus] ?? value;
+  return value.replace(/^\w/, (c) => c.toUpperCase());
 }
 
 /*
@@ -32,7 +57,9 @@ const GROUPS: { heading: string; rows: [string, string][] }[] = [
       ["Age", "age"],
       ["Gender identity", "gender"],
       ["Highest education", "education"],
-      ["Region", "region"],
+      ["Country", "country"],
+      ["State", "state"],
+      ["Local government area", "lga"],
     ],
   },
   {
@@ -56,6 +83,14 @@ const GROUPS: { heading: string; rows: [string, string][] }[] = [
     ],
   },
   {
+    heading: "Work",
+    rows: [
+      ["Employment status", "employmentStatus"],
+      ["Sector you work in", "workSector"],
+      ["Sectors you have experience in", "sectorExperience"],
+    ],
+  },
+  {
     heading: "Background",
     rows: [
       ["Clinical healthcare role", "clinicalRole"],
@@ -71,19 +106,16 @@ export default async function ProfilePage() {
   if (!isParticipant(session)) redirect("/sign-in?next=/profile");
 
   const pid = session!.subject;
-  const [bookingsResult, profileResult, interestsResult] = await Promise.all([
+  const [bookingsResult, profileResult] = await Promise.all([
     getMyBookings(),
     getMyProfile(),
-    getMyInterests(),
   ]);
 
-  const bookings = pageData(bookingsResult);
-  const profile = pageData(profileResult);
-  const interests = pageData(interestsResult);
+  const bookings = pageData(bookingsResult, "/sign-in");
+  const profile = pageData(profileResult, "/sign-in");
 
   if (!bookings.ok) return <DataError breadcrumb={CRUMBS} title="Profile" message={bookings.message} />;
   if (!profile.ok) return <DataError breadcrumb={CRUMBS} title="Profile" message={profile.message} />;
-  if (!interests.ok) return <DataError breadcrumb={CRUMBS} title="Profile" message={interests.message} />;
 
   const now = serverNow();
   const attended = bookings.data.filter((b) => b.status === "attended").length;
@@ -196,25 +228,6 @@ export default async function ProfilePage() {
 
         {/* Secondary: related, at a glance */}
         <aside className="flex flex-col gap-8 lg:border-l lg:border-stroke-2 lg:pl-8">
-          <section>
-            <div className="mb-3 flex items-baseline justify-between gap-4">
-              <h2 className="type-body-strong text-fg-1">Interests</h2>
-              <Link href="/interests" className="rounded-xs type-caption text-link hover:underline focus-ring">
-                {interests.data.length ? "Edit" : "Add"}
-              </Link>
-            </div>
-            {interests.data.length === 0 ? (
-              <p className="type-body text-fg-3">None yet. Studies that match reach you first.</p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {interests.data.map((tag) => (
-                  <li key={tag} className="type-body text-fg-1">
-                    {tag}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
 
           <section>
             <h2 className="mb-3 type-body-strong text-fg-1">Your identity</h2>

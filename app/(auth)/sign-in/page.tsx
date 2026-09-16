@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Breadcrumb, ButtonLink, PageHeader } from "@/components/fluent";
+import { AuthSplit } from "@/components/auth/auth-split";
 import { SignInForm } from "@/components/portal/sign-in-form";
 import { isParticipant, readSession } from "@/lib/api";
 
@@ -16,20 +16,12 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
   const next = first((await searchParams).next);
 
   return (
-    <div className="flex flex-col gap-6">
-      <Breadcrumb items={[{ label: "Studies", href: "/" }, { label: "Sign in" }]} />
-
-      <PageHeader
-        title="Sign in"
-        description="Use the email and password you chose when you registered."
-        actions={
-          <ButtonLink href="/signup" variant="secondary">
-            Register instead
-          </ButtonLink>
-        }
-      />
-
+    <AuthSplit
+      wordmark="BIL Research"
+      tagline="Take part in a supervised session, see exactly who each study is for before you book, and get paid for your time."
+      homeHref="/"
+    >
       <SignInForm next={next} />
-    </div>
+    </AuthSplit>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
-import { Checkmark, ChevronDown } from "@/components/icons";
+import { useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { Checkmark } from "@/components/icons";
 
 /*
  * Form controls (Figma "Complete Account Setup"):
@@ -98,30 +98,12 @@ export function Input({ invalid = false, size = "md", className = "", ...rest }:
 
 /* ---------- Select ---------- */
 
-interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> {
-  invalid?: boolean;
-  size?: ControlSize;
-}
-
-export function Select({ invalid = false, size = "md", className = "", children, ...rest }: SelectProps) {
-  const chevron = size === "md" ? 24 : 16;
-  return (
-    <span className="relative block">
-      <select
-        aria-invalid={invalid || undefined}
-        className={`${CONTROL} ${CONTROL_SIZE[size]} appearance-none ${size === "md" ? "pr-12" : "pr-9"} ${invalid ? INVALID : ""} ${className}`}
-        {...rest}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        size={chevron}
-        strokeWidth={2}
-        className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-field-label ${size === "md" ? "right-4" : "right-3"}`}
-      />
-    </span>
-  );
-}
+/*
+ * Lives in its own module because it is no longer a native <select>: the
+ * operating system's list ignored every token here and could not be styled.
+ * Re-exported so `@/components/fluent` stays the one import for form controls.
+ */
+export { Select, type SelectProps } from "./select";
 
 /* ---------- Textarea ---------- */
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { CONDITIONS, EDUCATIONS, GENDERS, HANDEDNESS, REGIONS } from "./screening-schema";
+import { COUNTRY_CODES } from "./countries";
+import { EXPERIENCE_LEVELS, SECTORS } from "./sectors";
+import { CONDITIONS, EDUCATIONS, GENDERS, HANDEDNESS } from "./screening-schema";
 
 /*
  * What the studies endpoint accepts when a study is authored.
@@ -18,7 +20,7 @@ export const studyRulesSchema = z
     maxAge: z.number().int().min(13).max(120).optional(),
     allowedGenders: z.array(z.enum(GENDERS)).min(1).optional(),
     minEducation: z.enum(EDUCATIONS).optional(),
-    allowedRegions: z.array(z.enum(REGIONS)).min(1).optional(),
+    allowedCountries: z.array(z.enum(COUNTRY_CODES)).min(1).optional(),
     requireNormalVisionHearing: z.boolean().optional(),
     requiredHandedness: z.enum(HANDEDNESS).optional(),
     requireEnglishFluent: z.boolean().optional(),
@@ -65,6 +67,32 @@ export const createStudySchema = z.object({
   inclusionCriteria: z.array(z.string().min(5, "An inclusion statement needs at least five characters.")),
   rules: studyRulesSchema,
   researcherId: z.string().length(24, "Choose the researcher responsible for this study."),
+  /* Everyone else who may see and run the study. The responsible researcher is
+     implied by researcherId and is not repeated here. */
+  assignedStaff: z.array(z.string().length(24)).optional(),
+  /* The sector this study recruits for, matched against the sectors
+     participants said they would sit a study about. */
+  sector: z.enum(SECTORS).optional(),
+  minExperience: z.enum(EXPERIENCE_LEVELS).optional(),
+  /* The screener the researchers write. A question with no disqualifying answer
+     filters nobody, which is allowed — it is then simply a question. */
+  screener: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        prompt: z.string().trim().min(3, "Write the question participants will read."),
+        options: z
+          .array(
+            z.object({
+              id: z.string().min(1),
+              label: z.string().trim().min(1, "Give the answer a label."),
+              disqualifies: z.boolean(),
+            }),
+          )
+          .min(2, "A question needs at least two answers."),
+      }),
+    )
+    .optional(),
 });
 
 export type CreateStudyInput = z.infer<typeof createStudySchema>;

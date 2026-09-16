@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Breadcrumb, ButtonLink, MessageBar, PageHeader } from "@/components/fluent";
+import { redirect } from "next/navigation";
+import { Breadcrumb, MessageBar, PageHeader } from "@/components/fluent";
 import { StudyCard } from "@/components/portal/study-card";
 import { DataError } from "@/components/ui/data-error";
 import { getStudies, isParticipant, pageData, readSession } from "@/lib/api";
@@ -13,15 +14,21 @@ function first(value: string | string[] | undefined): string {
 }
 
 /**
- * The public listing. No account is needed to read it — the API serves the
- * recruiting studies to anyone, and only booking asks for a session.
+ * The studies index, for signed-in participants.
+ *
+ * It used to be public. It is not any more: someone who cannot book has no use
+ * for a list of things to book, so a visitor without a session is sent to sign
+ * in rather than shown a catalogue and a banner explaining they may not use it.
+ * The session is read before the studies so a guest is redirected without a
+ * pointless call to the API.
  */
 export default async function StudiesPage({ searchParams }: PageProps<"/">) {
+  if (!isParticipant(await readSession())) redirect("/sign-in?next=/");
+
   const query = first((await searchParams).q).trim().toLowerCase();
-  const [result, session] = await Promise.all([getStudies().then(pageData), readSession()]);
+  const result = pageData(await getStudies(), "/sign-in");
   if (!result.ok) return <DataError breadcrumb={CRUMBS} title="Studies recruiting now" message={result.message} />;
 
-  const signedIn = isParticipant(session);
   const visible = query
     ? result.data.filter((s) => [s.title, s.shortDescription, s.irbCode, ...s.tags].join(" ").toLowerCase().includes(query))
     : result.data;
@@ -34,20 +41,7 @@ export default async function StudiesPage({ searchParams }: PageProps<"/">) {
         eyebrow="Behavioural Insights Lab"
         title="Studies recruiting now"
         description="Take part in a supervised session, see exactly who each study is for before you book, and get paid for your time."
-        actions={
-          signedIn ? undefined : (
-            <ButtonLink href="/signup" variant="primary">
-              Register to take part
-            </ButtonLink>
-          )
-        }
       />
-
-      {!signedIn && (
-        <MessageBar intent="info" title="You are browsing as a guest.">
-          Anyone can read what each study involves. Registering takes about three minutes and is what lets you book.
-        </MessageBar>
-      )}
 
       {visible.length === 0 ? (
         <MessageBar intent="info" title={query ? `No studies match “${query}”.` : "No studies are recruiting right now."}>

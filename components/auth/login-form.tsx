@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { signIn, type SignInResult } from "@/app/(auth)/login/actions";
+import { FIELD, LABEL, SUBMIT } from "@/components/auth/controls";
 import { Button, MessageBar } from "@/components/fluent";
 import { EyeClosed, EyeOpen } from "@/components/icons";
 
@@ -15,9 +16,7 @@ import { EyeClosed, EyeOpen } from "@/components/icons";
  * 600, the app-wide ceiling.
  */
 
-const FIELD =
-  "h-[54px] w-full rounded-[16px] border bg-bg-1 px-6 text-[16px] leading-[22px] tracking-[0.2px] text-fg-2 placeholder:text-[#BDBDBD] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/25";
-const LABEL = "text-[18px] font-medium leading-[25px] tracking-[0.2px] text-[#424242]";
+
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState<SignInResult | null, FormData>(signIn, null);
@@ -100,7 +99,7 @@ export function LoginForm() {
         type="submit"
         variant="primary"
         loading={pending}
-        className="h-[57px] w-full rounded-[16px]! text-[18px] font-semibold leading-[25px] tracking-[0.2px]"
+        className={SUBMIT}
       >
         Sign in
       </Button>

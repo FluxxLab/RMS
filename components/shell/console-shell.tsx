@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { AppFooter } from "./app-footer";
 import { AppRail, type RailItem } from "./app-rail";
 import { NavBar } from "./nav-bar";
+import { PageScroller } from "./page-scroller";
 import { Wordmark } from "./wordmark";
 import type { TopNavLink } from "./top-nav";
 
@@ -95,15 +96,23 @@ export function ConsoleShell({
         )}
         {/* The scroller is full width, so its scrollbar sits at the window edge;
             the capped box inside it only limits how wide the content runs. */}
-        {/* Focusable because it scrolls: a charts-only page has nothing else to
-            tab to, and a region that cannot take focus cannot be scrolled from the
-            keyboard. The ring is inset so it reads as "this area is active". */}
-        <main
-          tabIndex={0}
-          className="scroll-thin flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
+        {/* Focusable because it scrolls: a region that cannot take focus cannot
+            be scrolled from the keyboard, and on a charts-only page there is
+            nothing else to tab to. The ring is inset so it reads as "this area
+            is active". PageScroller is what puts focus here on arrival. */}
+        <PageScroller
+          /*
+            * `overflow-x-clip` is deliberate, not decoration. Setting only
+            * `overflow-y-auto` makes the other axis compute to `auto` as well,
+            * so anything a few pixels too wide — a chart label, a table — gave
+            * the whole console a horizontal scrollbar. Clipping x confines
+            * scrolling to the vertical, and wide content that genuinely needs
+            * to scroll does it inside its own container.
+            */
+          className="scroll-thin flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/40"
         >
           <div className="mx-auto flex w-full max-w-shell flex-1 flex-col">{children}</div>
-        </main>
+        </PageScroller>
       </div>
 
       <AppFooter note={footNote} />

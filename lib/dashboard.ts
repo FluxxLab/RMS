@@ -17,7 +17,6 @@ export interface ReportedKpis {
   /** 0–1, or null before any session has elapsed. */
   attendanceRate: number | null;
   attendedCount: number;
-  interestLeads: number;
 }
 
 export interface Kpis extends ReportedKpis {
@@ -26,15 +25,9 @@ export interface Kpis extends ReportedKpis {
   /** Places still free across the slots the engine counts as open. */
   openPlaces: number;
   upcomingSchedules: number;
-  interestLeadsToday: number;
 }
 
-export function dashboardKpis(
-  reported: ReportedKpis,
-  slots: SlotRow[],
-  leads: { updatedAt: string }[],
-  now: string,
-): Kpis {
+export function dashboardKpis(reported: ReportedKpis, slots: SlotRow[], now: string): Kpis {
   const live = slots.filter((s) => s.status !== "cancelled");
 
   return {
@@ -42,7 +35,6 @@ export function dashboardKpis(
     sessionsToday: live.filter((s) => isSameDay(s.start, now)).length,
     openPlaces: live.filter((s) => s.status === "available").reduce((sum, s) => sum + freePlaces(s), 0),
     upcomingSchedules: live.filter((s) => s.start > now).length,
-    interestLeadsToday: leads.filter((lead) => isSameDay(lead.updatedAt, now)).length,
   };
 }
 

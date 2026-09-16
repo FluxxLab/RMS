@@ -1,12 +1,12 @@
 import { Breadcrumb, Meter, PageHeader } from "@/components/fluent";
-import { Calendar, CheckmarkCircle, Clock, Tag, Timer } from "@/components/icons";
+import { Calendar, CheckmarkCircle, Clock, Timer } from "@/components/icons";
 import { OccupancyChart } from "@/components/dashboard/occupancy-chart";
-import { ShareChart } from "@/components/dashboard/share-chart";
 import { StackedBarChart } from "@/components/dashboard/stacked-bar-chart";
 import { TxLogPanel } from "@/components/dashboard/tx-log-panel";
 import type { TxLogEntry } from "@/components/dashboard/use-tx-log-stream";
 import { activeSeries } from "@/components/dashboard/actor-series";
 import { StatRow, StatTile } from "@/components/ui/stat-tile";
+import { StudyProgress, type StudyProgressRow } from "@/components/dashboard/study-progress";
 import { auditByDay, dashboardKpis, todaySessions, type ReportedKpis } from "@/lib/dashboard";
 import type { SlotRow } from "@/lib/slots";
 import { fmtDate, fmtDateTime, fmtTime } from "@/lib/format";
@@ -21,18 +21,31 @@ interface OpsDashboardProps {
   /** The engine's own headline counts. */
   reported: ReportedKpis;
   slots: SlotRow[];
-  studies: StudyShare[];
-  leads: { updatedAt: string }[];
+  /*
+   * The full per-study row, not just a title and a count: the panel shows
+   * recruitment against capacity, which needs the capacity.
+   */
+  studies: StudyProgressRow[];
   /** Audit entries, newest first. */
   audit: { at: string; actorRole: string }[];
   /** The engine log as the server read it; the panel keeps it current itself. */
   txLog: TxLogEntry[];
   now: string;
+  /*
+   * Whether the viewer oversees the whole lab.
+   *
+   * The interest feed, the engine log and the audit trail are the three things
+   * here that cannot be narrowed to a study: interests name no study, and
+   * neither audit entries nor engine calls carry one. Shown to someone who is
+   * scoped they would report on colleagues' work, so they belong to the
+   * superadmin — who is not scoped and is the one doing the overseeing.
+   */
+  oversight: boolean;
 }
 
 /** The researcher console's operations dashboard — server-rendered from API data. */
-export function OpsDashboard({ reported, slots, studies, leads, audit, txLog, now }: OpsDashboardProps) {
-  const kpis = dashboardKpis(reported, slots, leads, now);
+export function OpsDashboard({ reported, slots, studies, audit, txLog, now, oversight }: OpsDashboardProps) {
+  const kpis = dashboardKpis(reported, slots, now);
   const sessions = todaySessions(slots, now);
   const days = auditByDay(audit);
   const series = activeSeries(days);
@@ -78,7 +91,6 @@ export function OpsDashboard({ reported, slots, studies, leads, audit, txLog, no
         >
           <Meter value={ratePct ?? 0} label="Attendance rate" className="mt-4" />
         </StatTile>
-        <StatTile icon={<Tag />} label="Interest leads" value={String(kpis.interestLeads)} detail={`${kpis.interestLeadsToday} updated today`} />
       </StatRow>
 
       {/* Today's sessions — occupancy across the day */}
@@ -93,27 +105,28 @@ export function OpsDashboard({ reported, slots, studies, leads, audit, txLog, no
         }))}
       />
 
-      {/* Study log — where the lab's bookings actually go */}
-      <ShareChart
-        title="Study log"
-        period={`${studies.length} ${studies.length === 1 ? "study" : "studies"}`}
-        unit="bookings"
-        emptyHint="No bookings yet. They appear here as participants reserve sessions."
-        slices={studies.map((study) => ({ label: study.title, value: study.seatsBooked }))}
+      {/* Recruitment against capacity, per study the viewer is on */}
+      <StudyProgress
+        studies={studies}
+        emptyHint="No studies are assigned to you yet. Ask a lab administrator to add you to one."
       />
 
-      {/* The engine log, streaming — the one view that must not lag reality */}
-      <TxLogPanel initial={txLog} />
+      {oversight && (
+        <>
+          {/* The engine log, streaming — the one view that must not lag reality */}
+          <TxLogPanel initial={txLog} />
 
-      {/* Audit log — recorded actions per day, by the role that acted */}
-      <StackedBarChart
-        eyebrow="Recorded actions"
-        title="Audit activity"
-        control={`${audit.length} entries`}
-        series={series}
-        bars={days.map((d) => ({ label: fmtDate(d.date), values: d.counts }))}
-        emptyHint="Nothing audited yet. Every reservation and check-in adds a bar here."
-      />
+          {/* Audit log — recorded actions per day, by the role that acted */}
+          <StackedBarChart
+            eyebrow="Recorded actions"
+            title="Audit activity"
+            control={`${audit.length} entries`}
+            series={series}
+            bars={days.map((d) => ({ label: fmtDate(d.date), values: d.counts }))}
+            emptyHint="Nothing audited yet. Every reservation and check-in adds a bar here."
+          />
+        </>
+      )}
     </section>
   );
 }
