@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { adminLogin, apiMessage, SESSION_COOKIE } from "@/lib/api";
+import { adminLogin, apiMessage, sessionFromToken, SESSION_COOKIE } from "@/lib/api";
 
 /*
  * Sign-in against the research API. The API verifies the credential and issues
@@ -57,5 +57,12 @@ export async function signIn(_prev: SignInResult | null, formData: FormData): Pr
     maxAge: result.data.maxAge,
   });
 
-  redirect("/staff/dashboard");
+  /*
+   * Superadmin control is its own interface, not a deeper part of the console,
+   * so the two roles land in different places rather than sharing a dashboard.
+   * The role comes from the token just issued: the cookie set above is not
+   * readable again within this request.
+   */
+  const session = sessionFromToken(result.data.token);
+  redirect(session?.role === "super_admin" ? "/admin" : "/staff/dashboard");
 }
