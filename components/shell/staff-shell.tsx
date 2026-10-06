@@ -12,7 +12,8 @@ const SECTIONS = [
   { href: "/staff/studies", label: "Studies" },
   { href: "/staff/participants", label: "Participants" },
   { href: "/staff/recruitment", label: "Recruitment" },
-  { href: "/admin", label: "Admin" },
+  // No link to /admin: the control plane is a separate console for a role that
+  // never sees this shell, so the entry would only ever be a dead end here.
 ];
 
 interface StaffShellProps {

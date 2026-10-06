@@ -32,10 +32,14 @@ function decodePayload(token: string): unknown {
   }
 }
 
-export async function readSession(): Promise<Session | null> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-
+/**
+ * The session a token represents, without touching the cookie store.
+ *
+ * Sign-in needs the role before the cookie it just set can be read back, so the
+ * decode is separated from the read rather than relying on a write being
+ * visible within the same request.
+ */
+export function sessionFromToken(token: string): Session | null {
   const payload = decodePayload(token);
   if (payload === null || typeof payload !== "object") return null;
 
@@ -43,6 +47,11 @@ export async function readSession(): Promise<Session | null> {
   if (typeof sub !== "string" || typeof roles !== "string" || !ROLES.includes(roles)) return null;
 
   return { subject: sub, role: roles as SessionRole };
+}
+
+export async function readSession(): Promise<Session | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? sessionFromToken(token) : null;
 }
 
 /** True when the session belongs to a participant rather than a staff account. */

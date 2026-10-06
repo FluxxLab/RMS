@@ -316,5 +316,5 @@ export function participantLogin(email: string, password: string) {
 }
 
 export { pageData } from "./page";
-export { isParticipant, readSession, type Session, type SessionRole } from "./session";
+export { isParticipant, readSession, sessionFromToken, type Session, type SessionRole } from "./session";
 export { apiMessage, fetchRaw, openStream, SESSION_COOKIE, type ApiFailure, type ApiResult } from "./client";
