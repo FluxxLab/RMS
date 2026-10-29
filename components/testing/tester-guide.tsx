@@ -121,12 +121,45 @@ function start(route: string) {
   emit();
 }
 
+/*
+ * Push a result to the shared endpoint so the Excel refresh sees it.
+ *
+ * Fire and forget, and deliberately silent on failure: the local copy is
+ * already saved, so a tester on a flaky connection keeps working and the
+ * export still carries everything. Notes are debounced because otherwise
+ * every keystroke would be a write.
+ */
+const pending = new Map<string, number>();
+
+function syncResult(id: string, entry: Recorded, tester: string, delay: number) {
+  const existing = pending.get(id);
+  if (existing) window.clearTimeout(existing);
+
+  pending.set(
+    id,
+    window.setTimeout(() => {
+      pending.delete(id);
+      void fetch("/api/qa/results", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ testId: id, result: entry.result, notes: entry.notes, tester }),
+        keepalive: true,
+      }).catch(() => {
+        /* Local copy stands; the CSV export is the backstop. */
+      });
+    }, delay),
+  );
+}
+
 function record(id: string, patch: Partial<Recorded>) {
   const current = state.results[id] ?? { result: "Pass" as StepResult, notes: "" };
-  const results = { ...state.results, [id]: { ...current, ...patch } };
+  const next = { ...current, ...patch };
+  const results = { ...state.results, [id]: next };
   writeResults(results);
   state = { ...state, results };
   emit();
+  // A verdict is one deliberate click; notes arrive a keystroke at a time.
+  syncResult(id, next, state.tester, patch.notes === undefined ? 0 : 800);
 }
 
 function setTester(name: string) {

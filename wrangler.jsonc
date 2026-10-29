@@ -19,6 +19,12 @@
   // Kept here rather than in the dashboard: `wrangler deploy` replaces the
   // Worker's variables with this list, so anything set by hand gets wiped.
   // Workers cannot fetch a bare IP address, so the API is reached by hostname.
+  // QA results from the in-app tester guide. Nothing to do with the research
+  // databases: create with `npx wrangler kv namespace create QA_RESULTS` and
+  // paste the id it prints over the placeholder below.
+  "kv_namespaces": [
+    { "binding": "QA_RESULTS", "id": "REPLACE_WITH_NAMESPACE_ID" }
+  ],
   "vars": {
     "API_BASE_URL": "http://ec2-18-132-238-175.eu-west-2.compute.amazonaws.com"
   },
