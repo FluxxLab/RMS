@@ -196,7 +196,11 @@ export function TesterGuide() {
   const vw = typeof window === "undefined" ? 1280 : window.innerWidth;
   const below = rect ? rect.top + rect.height + 12 : 0;
   const placeAbove = rect ? below > vh - 220 : false;
+  /* Anchored below, anchored above, or — when the step points at nothing —
+     centred. The centred case is the tall closing card, so it is centred by
+     transform rather than by a top offset, which would push it off-screen. */
   const cardTop = rect ? (placeAbove ? Math.max(12, rect.top - 12) : below) : vh / 2;
+  const centred = rect === null;
   const cardLeft = rect
     ? Math.min(Math.max(12, rect.left + rect.width / 2 - CARD_W / 2), vw - CARD_W - 12)
     : Math.max(12, vw / 2 - CARD_W / 2);
@@ -226,14 +230,16 @@ export function TesterGuide() {
         role="dialog"
         aria-live="polite"
         aria-label={`Tester guide: ${entry.title}`}
-        className="fixed z-[60] w-[min(22.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg bg-[var(--color-surface)] shadow-[0_12px_40px_rgba(0,0,0,0.3)]"
+        className="fixed z-[60] flex w-[min(22.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg bg-[var(--color-surface)] shadow-[0_12px_40px_rgba(0,0,0,0.3)]"
         style={{
           top: cardTop,
           left: cardLeft,
-          transform: placeAbove ? "translateY(-100%)" : undefined,
+          // Never taller than the screen; the body scrolls inside instead.
+          maxHeight: "calc(100vh - 1.5rem)",
+          transform: centred ? "translateY(-50%)" : placeAbove ? "translateY(-100%)" : undefined,
         }}
       >
-        <header className="flex items-center justify-between gap-3 bg-[var(--color-brand)] px-4 py-2.5 text-white">
+        <header className="flex shrink-0 items-center justify-between gap-3 bg-[var(--color-brand)] px-4 py-2.5 text-white">
           <p className="text-[11px] font-semibold tracking-wide uppercase opacity-85">
             {entry.title} · {closing ? "Finish" : `Step ${snap.index + 1} of ${total}`}
           </p>
@@ -247,7 +253,7 @@ export function TesterGuide() {
           </button>
         </header>
 
-        <div className="max-h-[22rem] overflow-y-auto px-4 py-3 text-[13px] leading-relaxed text-[var(--color-ink)]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed text-[var(--color-ink)]">
           {closing ? (
             <>
               <p className="font-semibold">Before you write anything up</p>
@@ -287,7 +293,7 @@ export function TesterGuide() {
           )}
         </div>
 
-        <footer className="flex items-center justify-between gap-2 border-t border-[var(--color-divider)] px-4 py-2.5">
+        <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--color-divider)] px-4 py-2.5">
           <button
             type="button"
             onClick={end}
