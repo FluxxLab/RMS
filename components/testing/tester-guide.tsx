@@ -392,7 +392,7 @@ export function TesterGuide() {
               <p className="mt-1 text-[12px] text-[var(--color-icon)]">{entry.goal}</p>
 
               <h3 className="mt-3 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-success-fg)]">
-                Correct, do not report
+                Correct: do not report
               </h3>
               <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-success-stroke)] bg-[var(--color-success-bg)] px-3 py-2">
                 {entry.accept.map((item) => (
