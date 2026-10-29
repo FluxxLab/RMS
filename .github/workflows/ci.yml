@@ -65,3 +65,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # The tester guide is compiled into the bundle by `next build`, so it
+          # has to be present here rather than as a Worker runtime binding.
+          # Held as a repository variable so switching it off is a settings
+          # change, not a commit: unset TESTER_GUIDE and redeploy.
+          NEXT_PUBLIC_TESTER_GUIDE: ${{ vars.TESTER_GUIDE }}
