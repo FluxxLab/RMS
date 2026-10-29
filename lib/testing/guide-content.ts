@@ -4,8 +4,8 @@
  *
  * Every step carries its own expected result, because "it did something" is
  * not a test. Most wasted defect reports come from correct behaviour that
- * reads as broken — a refusal that is the engine working, a pseudonym where a
- * name was expected, a slot that vanishes because a cooldown rule fired — so
+ * reads as broken, a refusal that is the engine working, a pseudonym where a
+ * name was expected, a slot that vanishes because a cooldown rule fired, so
  * each entry also states plainly what must not be written up.
  */
 
@@ -28,8 +28,8 @@ export interface GuideStep {
   expect: string;
   /**
    * The control this step is about, spotlit while the step is shown. Omit it
-   * for a step with nothing on this page to point at — "sign out, then sign
-   * in as somebody else" — and the card is shown centred instead.
+   * for a step with nothing on this page to point at, "sign out, then sign
+   * in as somebody else", and the card is shown centred instead.
    */
   target?: TourTarget;
 }
@@ -63,7 +63,7 @@ export const GUIDE: readonly GuideEntry[] = [
       {
         action: "Sign out, then sign in with the superadmin account.",
         expect:
-          "You land on /admin instead — Overview, Studies, Schedules, Staff, Audit log. A different console, not a bigger version of the same one.",
+          "You land on /admin instead: Overview, Studies, Schedules, Staff, Audit log. A different console, not a bigger version of the same one.",
       },
       {
         action: "As the researcher, type /admin into the address bar.",
@@ -117,7 +117,7 @@ export const GUIDE: readonly GuideEntry[] = [
         action: "Register with an email you have not used before.",
         target: { kind: "label", text: "Email" },
         expect:
-          "An account is created and you are given a pseudonym shaped PIC/2026/LABS/XXXXX. Note it down — staff screens will only ever show you this.",
+          "An account is created and you are given a pseudonym shaped PIC/2026/LABS/XXXXX. Note it down, staff screens will only ever show you this.",
       },
       {
         action: "Register the same email a second time.",
@@ -175,7 +175,7 @@ export const GUIDE: readonly GuideEntry[] = [
       {
         action: "Cancel a booking, then reopen the study it belonged to.",
         expect:
-          "The seat is free again and the slot is bookable immediately — not after a delay or a staff action.",
+          "The seat is free again and the slot is bookable immediately, not after a delay or a staff action.",
       },
       {
         action: "Reschedule a booking into another session of the same study.",
@@ -209,7 +209,7 @@ export const GUIDE: readonly GuideEntry[] = [
       },
     ],
     accept: [
-      "Nothing is emailed to you. Notifications are a later release — the interest is recorded, not acted on.",
+      "Nothing is emailed to you. Notifications are a later release, the interest is recorded, not acted on.",
     ],
     report: ["An interest that does not persist, or appears against the wrong participant."],
   },
@@ -242,7 +242,7 @@ export const GUIDE: readonly GuideEntry[] = [
       "Becoming ineligible for a study the moment you book it is expected behaviour.",
     ],
     report: [
-      "A scorecard that says you pass, followed by a refusal when you book — or the reverse.",
+      "A scorecard that says you pass, followed by a refusal when you book, or the reverse.",
       "A booking that succeeds without every statement confirmed.",
     ],
   },
@@ -313,7 +313,7 @@ export const GUIDE: readonly GuideEntry[] = [
       },
     ],
     accept: [
-      "Every row shows a pseudonym. No names, ever — that is the privacy design, not missing data.",
+      "Every row shows a pseudonym. No names, ever, that is the privacy design, not missing data.",
       "A no-show keeping the seat and a cancellation releasing it is the intended difference between them.",
     ],
     report: [
@@ -331,7 +331,7 @@ export const GUIDE: readonly GuideEntry[] = [
         action: "Find a slot with capacity 1 and run the six-way concurrency stress test.",
         target: { kind: "role", role: "button", name: /stress test/i },
         expect:
-          "A result reading “0 succeeded, 6 correctly rejected. No overbooking.” — this is a PASS, see below.",
+          "A result reading “0 succeeded, 6 correctly rejected. No overbooking.” This is a PASS, see below.",
       },
       {
         action: "Check the slot's booked count afterwards.",
@@ -343,11 +343,11 @@ export const GUIDE: readonly GuideEntry[] = [
       },
     ],
     accept: [
-      "“0 succeeded, 6 correctly rejected” is a pass. The six synthetic participants have no screening profile, so the lock refuses five and the eligibility rule refuses the sixth — both guards shown in one run.",
+      "“0 succeeded, 6 correctly rejected” is a pass. The six synthetic participants have no screening profile, so the lock refuses five and the eligibility rule refuses the sixth. Both guards are shown in one run.",
       "The test passes whenever no more than one booking succeeds and capacity is never exceeded.",
     ],
     report: [
-      "More than one success, or any booked count above capacity. This is the most serious defect in the system — raise it immediately and stop.",
+      "More than one success, or any booked count above capacity. This is the most serious defect in the system. Raise it immediately and stop.",
     ],
   },
   {
@@ -359,7 +359,7 @@ export const GUIDE: readonly GuideEntry[] = [
         action: "Search and filter the registry, then open a participant.",
         target: { kind: "role", role: "heading", name: /participant/i },
         expect:
-          "A pseudonym, screening answers and booking history — and no name, email, phone or NIN anywhere.",
+          "A pseudonym, screening answers and booking history. No name, email, phone or NIN anywhere.",
       },
       {
         action: "Look for any way to resolve a pseudonym to a person.",
@@ -418,7 +418,7 @@ export const GUIDE: readonly GuideEntry[] = [
       },
       {
         action: "Publish it, then look at the participant portal.",
-        expect: "It appears there once it has at least one session in the future — not before.",
+        expect: "It appears there once it has at least one session in the future, not before.",
       },
       {
         action: "Open it as the participant and read the scorecard.",
@@ -486,7 +486,7 @@ export const GUIDE: readonly GuideEntry[] = [
     goal: "Evidence every mutating action: who did what, to what, and when.",
     steps: [
       {
-        action: "Elsewhere, perform three actions — a booking, a cancellation and a study change.",
+        action: "Elsewhere, perform three actions: a booking, a cancellation and a study change.",
         expect: "Nothing to see yet; come back here.",
       },
       {
@@ -501,7 +501,7 @@ export const GUIDE: readonly GuideEntry[] = [
     ],
     accept: ["Targets appear as pseudonyms or identifiers, never names."],
     report: [
-      "Any mutating action with no entry. This is as serious as an overbooking — the system's accountability rests on it.",
+      "Any mutating action with no entry. This is as serious as an overbooking. The system's accountability rests on it.",
       "An entry naming the wrong actor or role.",
     ],
   },
@@ -528,7 +528,7 @@ export const GUIDE: readonly GuideEntry[] = [
 /**
  * A stable identifier for one test step, shared by the app and the test plan
  * workbook. Derived from the route so it survives steps being reworded, and
- * changes only if a step is inserted or removed — at which point the sheet
+ * changes only if a step is inserted or removed, at which point the sheet
  * genuinely needs regenerating.
  */
 export function testId(entry: GuideEntry, index: number): string {
@@ -539,7 +539,7 @@ export function testId(entry: GuideEntry, index: number): string {
   return `${slug}-${String(index + 1).padStart(2, "0")}`;
 }
 
-/** Every step in the plan, flattened — the order the workbook uses. */
+/** Every step in the plan, flattened, the order the workbook uses. */
 export function allTestSteps(): Array<{
   id: string;
   area: string;

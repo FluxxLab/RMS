@@ -7,7 +7,7 @@ import { isKnownTestId, readResults, saveResult } from "@/lib/testing/qa-store";
  *
  * The tour runs in the browser, so anything it could present as a credential
  * would be public anyway. Rather than pretend otherwise, the endpoint accepts
- * only identifiers the published test plan contains and caps the free text —
+ * only identifiers the published test plan contains and caps the free text, 
  * which bounds the damage to overwriting a test row on a testing deployment.
  */
 

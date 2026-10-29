@@ -11,8 +11,8 @@ import { allTestSteps, guideFor, testId, type GuideEntry } from "@/lib/testing/g
  *
  * It runs only when NEXT_PUBLIC-free TESTER_GUIDE_ENABLED is on, reads the
  * route and nothing else, and never touches the API. Steps are matched to
- * elements by role and accessible name — the same way the e2e suite finds
- * them — so no component needed a test id adding to it.
+ * elements by role and accessible name, the same way the e2e suite finds
+ * them, so no component needed a test id adding to it.
  *
  * The tour starts itself once per route per browser. After that the floating
  * button replays it, because a tester who has seen it once should not have to
@@ -328,7 +328,7 @@ export function TesterGuide() {
   const vw = typeof window === "undefined" ? 1280 : window.innerWidth;
   const below = rect ? rect.top + rect.height + 12 : 0;
   const placeAbove = rect ? below > vh - 220 : false;
-  /* Anchored below, anchored above, or — when the step points at nothing —
+  /* Anchored below, anchored above, or, when the step points at nothing, 
      centred. The centred case is the tall closing card, so it is centred by
      transform rather than by a top offset, which would push it off-screen. */
   const cardTop = rect ? (placeAbove ? Math.max(12, rect.top - 12) : below) : vh / 2;
@@ -392,7 +392,7 @@ export function TesterGuide() {
               <p className="mt-1 text-[12px] text-[var(--color-icon)]">{entry.goal}</p>
 
               <h3 className="mt-3 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-success-fg)]">
-                Correct — do not report
+                Correct, do not report
               </h3>
               <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-success-stroke)] bg-[var(--color-success-bg)] px-3 py-2">
                 {entry.accept.map((item) => (
@@ -432,7 +432,7 @@ export function TesterGuide() {
                 </button>
                 <p className="mt-1.5 text-[11px] text-[var(--color-icon)]">
                   {recordedCount} of {allTestSteps().length} steps recorded, across every page. Paste it into the
-                  test-plan workbook — the Test IDs match.
+                  test-plan workbook, the Test IDs match.
                 </p>
               </div>
             </>
@@ -445,7 +445,7 @@ export function TesterGuide() {
               </p>
               {step?.target && rect === null ? (
                 <p className="mt-2 text-[12px] text-[var(--color-warning-fg)]">
-                  The control for this step is not on screen — it may need a different page or a sign-in first.
+                  The control for this step is not on screen, it may need a different page or a sign-in first.
                 </p>
               ) : null}
 

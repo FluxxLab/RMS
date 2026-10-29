@@ -4,7 +4,7 @@
  * Nothing in the app carries a test id, and adding one to every button a
  * tester should look at would mean editing dozens of components for the sake
  * of a temporary aid. The e2e suite already selects by role and accessible
- * name — `getByRole("button", { name: "Sign in" })` — so the tour does the
+ * name, `getByRole("button", { name: "Sign in" })`, so the tour does the
  * same. If the button's label changes, both break together, which is the
  * right coupling: a renamed control is a changed instruction.
  */
