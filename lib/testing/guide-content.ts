@@ -1,12 +1,12 @@
 /*
- * What a tester should do on each screen, and — more usefully — what they
- * should not write up.
+ * What a tester should do on each screen, action by action, and what each
+ * action should produce.
  *
- * Most wasted defect reports come from correct behaviour that reads as broken:
- * a refusal that is the engine working, a pseudonym where a name was expected,
- * a slot that disappears because the cooldown rule fired. Each entry therefore
- * carries an `accept` list alongside the steps, so the answer is on the screen
- * rather than in a document nobody opened.
+ * Every step carries its own expected result, because "it did something" is
+ * not a test. Most wasted defect reports come from correct behaviour that
+ * reads as broken — a refusal that is the engine working, a pseudonym where a
+ * name was expected, a slot that vanishes because a cooldown rule fired — so
+ * each entry also states plainly what must not be written up.
  */
 
 /**
@@ -19,14 +19,20 @@
  */
 export const TESTER_GUIDE_ENABLED = true;
 
+export interface GuideStep {
+  /** The action to take. */
+  action: string;
+  /** What should happen. If it does not, that is the defect. */
+  expect: string;
+}
+
 export interface GuideEntry {
   /** Route prefix. The longest match wins, so `/staff/bookings` beats `/staff`. */
   path: string;
   title: string;
   /** One line: what this screen is for. */
   goal: string;
-  /** What to try, in order. */
-  steps: string[];
+  steps: GuideStep[];
   /** Correct behaviour that is commonly mistaken for a defect. */
   accept: string[];
   /** Worth raising from this screen. */
@@ -40,17 +46,36 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Staff sign-in",
     goal: "Get a research assistant, principal investigator or superadmin into their own console.",
     steps: [
-      "Sign in with the researcher account. You should land on the researcher console dashboard.",
-      "Sign out, then sign in with the superadmin account. You should land on the admin control plane instead.",
-      "Try a wrong password, then a participant's email and password.",
+      {
+        action: "Sign in with the researcher account.",
+        expect:
+          "You land on /staff/dashboard, with Bookings, Slots, Studies, Participants and Recruitment in the top bar.",
+      },
+      {
+        action: "Sign out, then sign in with the superadmin account.",
+        expect:
+          "You land on /admin instead — Overview, Studies, Schedules, Staff, Audit log. A different console, not a bigger version of the same one.",
+      },
+      {
+        action: "As the researcher, type /admin into the address bar.",
+        expect: "You are returned to /staff/dashboard. The control plane is not theirs.",
+      },
+      {
+        action: "Sign in with a correct email and a wrong password.",
+        expect: "“That email and password do not match an account.” Nothing more specific.",
+      },
+      {
+        action: "Try the participant's email and password here.",
+        expect:
+          "The same refusal, word for word. Participants sign in at /sign-in, a separate page and a separate store.",
+      },
     ],
     accept: [
-      "Both failures say the same thing — the message never reveals which half was wrong, or whether the email exists.",
-      "A participant account cannot sign in here. Participants use the portal sign-in, a different page and a different store.",
-      "The two roles land on different consoles by design. Superadmins do not get the researcher console, and researchers do not get the admin screens.",
+      "The failure message never says which half was wrong, or whether the email exists. Telling an attacker that an address is registered is a disclosure.",
+      "The two roles landing on different consoles is the design, not a routing bug.",
     ],
     report: [
-      "Either role landing in the other's console.",
+      "Either role landing in the other's console, or reaching the other's screens by typing the URL.",
       "An error message that names the email, or distinguishes a wrong password from an unknown account.",
     ],
   },
@@ -59,27 +84,40 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Participant sign-in",
     goal: "Get a member of the public into the portal.",
     steps: [
-      "Sign in with the participant account.",
-      "Try a staff email and password here.",
+      {
+        action: "Sign in with the participant account.",
+        expect: "You reach the portal and can see your bookings, interests and profile.",
+      },
+      {
+        action: "Try a staff email and password here.",
+        expect:
+          "Refused, with the same wording as any other failure. Staff accounts do not exist in this store.",
+      },
     ],
-    accept: [
-      "Staff accounts do not work on this page. Staff and participants are entirely separate stores.",
-      "The failure message is deliberately vague for both cases.",
-    ],
-    report: ["A staff account successfully signing in here."],
+    accept: ["The vague failure message is deliberate, for both cases."],
+    report: ["A staff account signing in successfully on this page."],
   },
   {
     path: "/signup",
     title: "Participant registration",
     goal: "Create an account and issue the pseudonym everything else will refer to.",
     steps: [
-      "Register a new participant with an email you have not used before.",
-      "Try registering the same email a second time.",
-      "Note the pseudonym you are given — it looks like PIC/2026/LABS/XXXXX.",
+      {
+        action: "Register with an email you have not used before.",
+        expect:
+          "An account is created and you are given a pseudonym shaped PIC/2026/LABS/XXXXX. Note it down — staff screens will only ever show you this.",
+      },
+      {
+        action: "Register the same email a second time.",
+        expect: "Refused. One account per address.",
+      },
+      {
+        action: "Open your profile and look for your name and email.",
+        expect: "They appear here, on your own profile, and nowhere else in the system.",
+      },
     ],
     accept: [
-      "Your name and email are stored once, in a separate identity vault. No staff screen will ever show them.",
-      "A repeated email is refused. One account per address.",
+      "Your name and email are written once into a separate identity vault. There is no update path and no staff screen reads from it.",
     ],
     report: [
       "A pseudonym in any other shape, or two accounts sharing one.",
@@ -93,18 +131,27 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Screening profile",
     goal: "Answer the master screening questions once, so every study can be assessed against them.",
     steps: [
-      "Work through every question and save.",
-      "Leave one answer blank, save, and try to book a study.",
-      "If you set your country to Nigeria, note that state and LGA become required.",
+      {
+        action: "Set your country to Nigeria.",
+        expect: "State and LGA become required. They are asked only of participants living there.",
+      },
+      {
+        action: "Leave one required answer blank, save, then open any study.",
+        expect:
+          "You are ineligible, and the scorecard marks the unanswered rule as missing rather than failed.",
+      },
+      {
+        action: "Return here, complete every answer, and save.",
+        expect: "The profile is accepted and the scorecard re-evaluates.",
+      },
     ],
     accept: [
-      "An incomplete profile makes you ineligible for everything. The system fails closed — where eligibility cannot be determined, the answer is no.",
-      "State and LGA are asked only of participants living in Nigeria. They are not missing for everyone else.",
-      "Answering 'none' is an answer. Leaving a question untouched is not.",
+      "An incomplete profile makes you ineligible for everything. The system fails closed: where eligibility cannot be determined, the answer is no.",
+      "Answering “none” is an answer. Leaving a question untouched is not.",
     ],
     report: [
-      "A profile the system calls complete while a required answer is blank.",
-      "A question asked of the wrong group — Nigerian-only questions shown to someone abroad.",
+      "A profile the system treats as complete while a required answer is blank.",
+      "Nigeria-only questions shown to someone living elsewhere.",
     ],
   },
   {
@@ -112,26 +159,45 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "My bookings",
     goal: "Let a participant see, cancel and reschedule their own sessions without contacting staff.",
     steps: [
-      "Cancel a booking, then check whether that slot returns to the study page.",
-      "Reschedule a booking into another session of the same study.",
-      "Try to cancel a session that has already happened.",
+      {
+        action: "Cancel a booking, then reopen the study it belonged to.",
+        expect:
+          "The seat is free again and the slot is bookable immediately — not after a delay or a staff action.",
+      },
+      {
+        action: "Reschedule a booking into another session of the same study.",
+        expect: "The old seat is released, the new one taken, and you hold exactly one active booking.",
+      },
+      {
+        action: "Try to cancel a session whose time has passed.",
+        expect: "Refused. A past session cannot be cancelled or rescheduled.",
+      },
     ],
     accept: [
-      "Cancelling frees the seat and reopens the slot in the same action — the slot should come back immediately, not after a refresh cycle.",
-      "A past session cannot be cancelled or rescheduled.",
-      "After cancelling you may still be ineligible to rebook, if a cooldown or lifetime cap applies.",
+      "After cancelling you may still be unable to rebook, if a cooldown or lifetime cap applies to that study.",
     ],
     report: [
       "A cancelled booking whose seat is not freed, or whose slot stays marked full.",
-      "A booking you can cancel twice, or one that reappears as active.",
+      "A booking you can cancel twice, or one that returns to active on its own.",
     ],
   },
   {
     path: "/interests",
     title: "Research interests",
     goal: "Register the topics you would like to hear about, so recruitment can target you.",
-    steps: ["Add two or three interests, then remove one.", "Check they persist after a reload."],
-    accept: ["Nothing is emailed to you — notifications are a later release. The interest is recorded, not acted on."],
+    steps: [
+      {
+        action: "Add two or three interests, then remove one.",
+        expect: "The list reflects your changes and survives a reload.",
+      },
+      {
+        action: "Sign in as staff and open the Recruitment screen.",
+        expect: "Your interests appear as a lead, listed against your pseudonym.",
+      },
+    ],
+    accept: [
+      "Nothing is emailed to you. Notifications are a later release — the interest is recorded, not acted on.",
+    ],
     report: ["An interest that does not persist, or appears against the wrong participant."],
   },
   {
@@ -139,29 +205,49 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Study detail and eligibility",
     goal: "Show, before anyone travels, exactly which rules a participant passes and which they fail.",
     steps: [
-      "Open a study and read the eligibility scorecard rule by rule.",
-      "Confirm each inclusion statement, then book a session.",
-      "Return to the same study immediately after booking.",
+      {
+        action: "Open a study and read the eligibility scorecard rule by rule.",
+        expect: "Every rule shows pass, fail or missing, in plain language rather than a code.",
+      },
+      {
+        action: "Try to book without ticking every inclusion statement.",
+        expect: "Refused. Each statement is recorded consent and all are required.",
+      },
+      {
+        action: "Tick them all and book a session.",
+        expect: "The booking is confirmed and the slot's remaining capacity drops by one.",
+      },
+      {
+        action: "Return to the same study immediately.",
+        expect:
+          "You may now be ineligible for it, because of its cooldown or lifetime cap. That is the rule working.",
+      },
     ],
     accept: [
-      "Every rule shows pass, fail or missing. 'Missing' means you have not answered it, not that the system lost it.",
-      "You must tick every inclusion statement before the booking is allowed — this is recorded consent, not a formality.",
-      "After booking you may become ineligible for that study at once, because of its cooldown or lifetime cap. That is the rule working.",
+      "“Missing” on the scorecard means you have not answered that question, not that the system lost your answer.",
+      "Becoming ineligible for a study the moment you book it is expected behaviour.",
     ],
     report: [
       "A scorecard that says you pass, followed by a refusal when you book — or the reverse.",
-      "Booking succeeding without every statement confirmed.",
+      "A booking that succeeds without every statement confirmed.",
     ],
   },
   {
     path: "/",
     title: "Participant portal",
     goal: "Browse the studies currently recruiting.",
-    steps: ["Browse the list and open a study.", "Check that a study with no free sessions is handled sensibly."],
-    accept: [
-      "Only published studies with future sessions appear. An empty list is a valid state, not an error.",
+    steps: [
+      {
+        action: "Browse the list and open a study.",
+        expect: "Only published studies with sessions in the future are listed.",
+      },
+      {
+        action: "Open a study whose sessions are all full.",
+        expect: "It is clear that nothing can be booked, rather than the booking failing after you try.",
+      },
     ],
-    report: ["A cancelled or unpublished study appearing in the public list."],
+    accept: ["An empty list is a valid state. It means no study is currently recruiting."],
+    report: ["A cancelled, retired or unpublished study appearing in the public list."],
   },
 
   /* ---------------- researcher console ---------------- */
@@ -170,30 +256,54 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Operations dashboard",
     goal: "Give research staff live numbers without anyone compiling a spreadsheet.",
     steps: [
-      "Note the figures, make a booking in another tab, and reload.",
-      "Cross-check one number against the bookings ledger.",
+      {
+        action: "Note the booking count, make a booking as the participant in another tab, then reload here.",
+        expect: "The count has gone up by one.",
+      },
+      {
+        action: "Cross-check one figure against the ledger it summarises.",
+        expect: "They agree exactly.",
+      },
     ],
-    accept: ["Figures are read when the page loads. They do not stream — a reload is expected."],
-    report: ["A figure that disagrees with the ledger it is counting."],
+    accept: ["Figures are read when the page loads. They do not stream, so a reload is expected."],
+    report: ["A figure that disagrees with the ledger it counts."],
   },
   {
     path: "/staff/bookings",
     title: "Bookings ledger",
     goal: "Work a session: check people in, record no-shows, cancel on a participant's behalf.",
     steps: [
-      "Check a participant in, then try to check the same one in twice.",
-      "Mark another as a no-show.",
-      "Cancel a booking here and confirm the slot reopens.",
+      {
+        action: "Check a participant in.",
+        expect: "Their row shows as attended, and the seat stays taken.",
+      },
+      {
+        action: "Try to check the same participant in again.",
+        expect: "Refused, or the action is unavailable. It cannot happen twice.",
+      },
+      {
+        action: "Mark a different booking as a no-show.",
+        expect:
+          "Recorded as a no-show, and the seat is NOT freed. The session happened; they did not attend.",
+      },
+      {
+        action: "Cancel a booking from here, then check the slot.",
+        expect: "The seat is freed and the slot reopens for booking.",
+      },
+      {
+        action: "Sign in as superadmin and open the audit log.",
+        expect:
+          "All four of the above appear, each naming the actor, their role, the action and the target.",
+      },
     ],
     accept: [
       "Every row shows a pseudonym. No names, ever — that is the privacy design, not missing data.",
-      "A no-show does not free the seat. The session happened; the participant did not attend.",
-      "A cancellation does free the seat and reopens the slot.",
+      "A no-show keeping the seat and a cancellation releasing it is the intended difference between them.",
     ],
     report: [
       "A name or email address anywhere in this view.",
       "A seat freed by a no-show, or not freed by a cancellation.",
-      "An action that leaves no entry in the audit log.",
+      "Any of those actions missing from the audit log.",
     ],
   },
   {
@@ -201,47 +311,78 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Slot ledger and stress test",
     goal: "See session capacity, and prove on demand that it can never be exceeded.",
     steps: [
-      "Run the six-way concurrency stress test on a one-seat slot.",
-      "Read the result carefully before judging it.",
-      "Book the last seat of a slot and watch its status change.",
+      {
+        action: "Find a slot with capacity 1 and run the six-way concurrency stress test.",
+        expect:
+          "A result reading “0 succeeded, 6 correctly rejected. No overbooking.” — this is a PASS, see below.",
+      },
+      {
+        action: "Check the slot's booked count afterwards.",
+        expect: "Unchanged. The test proves the guard without consuming the seat.",
+      },
+      {
+        action: "Book the last seat of a slot as a participant, then reload here.",
+        expect: "The slot's status changes to full and it leaves the participant's bookable list.",
+      },
     ],
     accept: [
-      "'0 succeeded, 6 correctly rejected. No overbooking.' is a PASS. The six synthetic participants have no screening profile, so the lock refuses five and the eligibility rule refuses the sixth — both guards demonstrated in one run.",
+      "“0 succeeded, 6 correctly rejected” is a pass. The six synthetic participants have no screening profile, so the lock refuses five and the eligibility rule refuses the sixth — both guards shown in one run.",
       "The test passes whenever no more than one booking succeeds and capacity is never exceeded.",
     ],
     report: [
-      "More than one success, or any count above capacity. This is the single most serious defect in the system — raise it immediately.",
+      "More than one success, or any booked count above capacity. This is the most serious defect in the system — raise it immediately and stop.",
     ],
   },
   {
     path: "/staff/participants",
     title: "Participant registry",
     goal: "Let staff work with participants without ever seeing who they are.",
-    steps: ["Search and filter the registry.", "Open a participant and read what is shown."],
-    accept: [
-      "Pseudonyms only. There is no name, email, phone or NIN here, and no way to reach one from this screen.",
-      "The vault-isolation notice at the top is intentional and should stay visible.",
+    steps: [
+      {
+        action: "Search and filter the registry, then open a participant.",
+        expect:
+          "A pseudonym, screening answers and booking history — and no name, email, phone or NIN anywhere.",
+      },
+      {
+        action: "Look for any way to resolve a pseudonym to a person.",
+        expect: "There is none from this screen.",
+      },
     ],
-    report: ["Any identifying detail at all. Treat this as high severity and stop testing until it is triaged."],
+    accept: ["The vault-isolation notice at the top is intentional and should stay visible."],
+    report: [
+      "Any identifying detail at all. Treat this as high severity and stop testing until it has been triaged.",
+    ],
   },
   {
     path: "/staff/recruitment",
     title: "Interest leads",
     goal: "Show who has registered interest in a topic, so a newly opened study can be filled.",
-    steps: ["Filter leads by topic.", "Cross-check one lead against the interests a participant registered."],
-    accept: [
-      "Leads are listed by pseudonym.",
-      "Nothing is sent to anyone. Outreach is a later release; this is a list, not a campaign.",
+    steps: [
+      {
+        action: "Filter leads by a topic the test participant registered.",
+        expect: "Their pseudonym appears in the results.",
+      },
+      {
+        action: "Filter by a topic they did not register.",
+        expect: "They do not appear.",
+      },
     ],
-    report: ["A lead for a topic the participant never registered."],
+    accept: ["Nothing is sent to anyone. Outreach is a later release; this is a list, not a campaign."],
+    report: ["A lead shown for a topic the participant never registered, or a registered one missing."],
   },
   {
     path: "/staff/studies",
     title: "Studies (read-only for research staff)",
     goal: "Let research staff see the studies they are working on.",
-    steps: ["Open a study and read its rules and sessions."],
+    steps: [
+      { action: "Open a study and read its rules and sessions.", expect: "Everything is visible." },
+      {
+        action: "Look for a way to change its status or edit its rules.",
+        expect: "There is none. Authoring belongs to the superadmin.",
+      },
+    ],
     accept: [
-      "A research assistant cannot author or retire a study. That is the superadmin's job and the API refuses it here.",
+      "A research assistant cannot author or retire a study, and the API refuses it independently.",
     ],
     report: ["A research assistant successfully changing a study's status or rules."],
   },
@@ -252,17 +393,29 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Study authoring",
     goal: "Create a study, set its eligibility rules, and move it through its lifecycle.",
     steps: [
-      "Create a study with an IRB code, inclusion criteria and at least one exclusion rule.",
-      "Publish it, then check it appears in the participant portal.",
-      "Retire it and check it leaves the portal.",
+      {
+        action: "Create a study with an IRB code, inclusion criteria and at least one exclusion rule.",
+        expect: "It saves and appears in the list as a draft.",
+      },
+      {
+        action: "Publish it, then look at the participant portal.",
+        expect: "It appears there once it has at least one session in the future — not before.",
+      },
+      {
+        action: "Open it as the participant and read the scorecard.",
+        expect: "The rules you configured are the rules shown, worded for a member of the public.",
+      },
+      {
+        action: "Retire the study and reload the portal.",
+        expect: "It is gone from the public list and can no longer be booked.",
+      },
     ],
     accept: [
-      "A study with no future sessions will not appear to participants even when published.",
-      "Rules you set here are what the eligibility scorecard will show participants — test one end to end.",
+      "A published study with no future sessions will not appear to participants. That is correct.",
     ],
     report: [
       "A rule configured here that the scorecard does not apply.",
-      "A retired study still bookable.",
+      "A retired study still visible or still bookable.",
     ],
   },
   {
@@ -270,29 +423,41 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Bulk scheduling",
     goal: "Publish a week of sessions in one action instead of one at a time.",
     steps: [
-      "Generate a week of sessions for a study.",
-      "Try to generate overlapping sessions in the same room.",
-      "Check the generated sessions appear to participants.",
+      {
+        action: "Generate a week of sessions for a study, in a named room.",
+        expect: "Every session appears with the times and room you entered, none of them in the past.",
+      },
+      {
+        action: "Generate an overlapping session in the same room.",
+        expect: "Refused. A room cannot hold two sessions at once.",
+      },
+      { action: "Open the participant portal.", expect: "The generated sessions are bookable." },
     ],
-    accept: [
-      "A room cannot hold two sessions of the same study at once — a refusal here is correct.",
-      "Sessions in the past are not offered to participants.",
+    accept: ["A refusal on an overlapping room booking is the rule working, not a validation bug."],
+    report: [
+      "Two sessions generated into the same room at the same time.",
+      "Times or rooms that differ from what you entered.",
     ],
-    report: ["Two sessions generated into the same room at the same time.", "Times or rooms that differ from what you entered."],
   },
   {
     path: "/admin/staff",
     title: "Staff and roles",
     goal: "Invite staff, set their role, and revoke access.",
     steps: [
-      "Invite a research assistant and sign in as them.",
-      "Change their role to principal investigator and note what changes.",
-      "Revoke them and confirm they can no longer sign in.",
+      {
+        action: "Invite a research assistant, then sign in as them.",
+        expect: "They reach /staff/dashboard and cannot open /admin.",
+      },
+      {
+        action: "Change their role to principal investigator, then have them sign in again.",
+        expect: "The new role applies from that sign-in onward.",
+      },
+      {
+        action: "Revoke the account and try to sign in as them.",
+        expect: "Refused, with the same wording as any other failed sign-in.",
+      },
     ],
-    accept: [
-      "A revoked account is refused at sign-in with the same vague message as any other failure.",
-      "Role changes take effect on the next sign-in, not mid-session.",
-    ],
+    accept: ["A role change takes effect at the next sign-in, not mid-session."],
     report: ["A revoked account that still works.", "A role that grants more than it should."],
   },
   {
@@ -300,14 +465,20 @@ export const GUIDE: readonly GuideEntry[] = [
     title: "Audit log",
     goal: "Evidence every mutating action: who did what, to what, and when.",
     steps: [
-      "Perform three actions elsewhere — a booking, a cancellation, a study change.",
-      "Return here and find all three.",
-      "Check each entry names the actor, their role, the action and the target.",
+      {
+        action: "Elsewhere, perform three actions — a booking, a cancellation and a study change.",
+        expect: "Nothing to see yet; come back here.",
+      },
+      {
+        action: "Return and find all three.",
+        expect: "Each entry names the actor, their role, the action and the target, with a timestamp.",
+      },
+      {
+        action: "Look for a way to edit or delete an entry.",
+        expect: "There is none. The log is append-only, which is the point of it.",
+      },
     ],
-    accept: [
-      "Targets appear as pseudonyms or identifiers, never names.",
-      "Entries cannot be edited or deleted. That is the point of the log.",
-    ],
+    accept: ["Targets appear as pseudonyms or identifiers, never names."],
     report: [
       "Any mutating action with no entry. This is as serious as an overbooking — the system's accountability rests on it.",
       "An entry naming the wrong actor or role.",
@@ -317,8 +488,17 @@ export const GUIDE: readonly GuideEntry[] = [
     path: "/admin",
     title: "System overview",
     goal: "One place for a lab director to see the state of the system.",
-    steps: ["Read the figures and compare one against the screen it summarises."],
-    accept: ["This is the superadmin console. The researcher console is a separate interface you will not see from here."],
+    steps: [
+      {
+        action: "Read each figure and compare it against the screen it summarises.",
+        expect: "They agree.",
+      },
+      {
+        action: "Look for the researcher console from here.",
+        expect: "It is not reachable. The two consoles are separate interfaces.",
+      },
+    ],
+    accept: ["This is the superadmin console. Not seeing the researcher screens here is the design."],
     report: ["A figure that disagrees with its source screen."],
   },
 ];
@@ -327,7 +507,10 @@ export const GUIDE: readonly GuideEntry[] = [
 export function guideFor(pathname: string): GuideEntry | null {
   let best: GuideEntry | null = null;
   for (const entry of GUIDE) {
-    const hit = entry.path === "/" ? pathname === "/" : pathname === entry.path || pathname.startsWith(`${entry.path}/`);
+    const hit =
+      entry.path === "/"
+        ? pathname === "/"
+        : pathname === entry.path || pathname.startsWith(`${entry.path}/`);
     if (hit && (best === null || entry.path.length > best.path.length)) best = entry;
   }
   return best;

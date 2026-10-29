@@ -114,10 +114,20 @@ export function TesterGuide() {
           <div className="flex-1 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed text-[var(--color-ink)]">
             <p className="text-[var(--color-icon)]">{entry.goal}</p>
 
-            <h3 className="mt-4 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-icon)]">Try this</h3>
-            <ol className="mt-1.5 list-decimal space-y-1.5 pl-4 marker:text-[var(--color-icon-muted)]">
+            <h3 className="mt-4 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-icon)]">
+              Do this, in order
+            </h3>
+            <ol className="mt-1.5 list-decimal space-y-3 pl-4 marker:font-semibold marker:text-[var(--color-brand)]">
               {entry.steps.map((step) => (
-                <li key={step}>{step}</li>
+                <li key={step.action}>
+                  <span className="font-semibold text-[var(--color-ink)]">{step.action}</span>
+                  {/* The expected result is the test. Without it a step only
+                      proves that something happened. */}
+                  <span className="mt-0.5 block text-[var(--color-icon)]">
+                    <span className="font-semibold text-[var(--color-brand)]">Expect: </span>
+                    {step.expect}
+                  </span>
+                </li>
               ))}
             </ol>
 
