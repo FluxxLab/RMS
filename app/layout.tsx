@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { RouteProgress } from "@/components/shell/route-progress";
 import { TesterGuide } from "@/components/testing/tester-guide";
+import { TESTER_GUIDE_ENABLED } from "@/lib/testing/guide-content";
 
 /*
  * Nunito Sans, self-hosted. next/font/google fetches from fonts.googleapis.com
@@ -33,11 +34,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Above every console, so a click is answered wherever it happens. */}
         <RouteProgress />
         {children}
-        {/*
-          Only in a testing deployment. The flag is read at build time, so a
-          production build has no trace of it in the bundle.
-        */}
-        {process.env.NEXT_PUBLIC_TESTER_GUIDE === "1" ? <TesterGuide /> : null}
+        {/* Testing aid. See TESTER_GUIDE_ENABLED for how to remove it. */}
+        {TESTER_GUIDE_ENABLED ? <TesterGuide /> : null}
       </body>
     </html>
   );

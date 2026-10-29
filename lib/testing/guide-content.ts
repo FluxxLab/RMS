@@ -9,6 +9,16 @@
  * rather than in a document nobody opened.
  */
 
+/**
+ * Whether the guide is mounted at all.
+ *
+ * A plain constant rather than an environment variable: NEXT_PUBLIC_* values
+ * are compiled in by `next build`, so a runtime binding could never switch it
+ * on, and routing one through CI put the same decision in two places. Set this
+ * to false and redeploy to take the guide out of every build.
+ */
+export const TESTER_GUIDE_ENABLED = true;
+
 export interface GuideEntry {
   /** Route prefix. The longest match wins, so `/staff/bookings` beats `/staff`. */
   path: string;
