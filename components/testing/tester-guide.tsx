@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { findTarget } from "@/lib/testing/find-target";
-import { guideFor, type GuideEntry } from "@/lib/testing/guide-content";
+import { allTestSteps, guideFor, testId, type GuideEntry } from "@/lib/testing/guide-content";
 
 /*
  * A guided tour for testers: one card at a time, pinned to the control the
@@ -20,6 +20,46 @@ import { guideFor, type GuideEntry } from "@/lib/testing/guide-content";
  */
 
 const SEEN_KEY = "bil-rms.tour.seen";
+const RESULTS_KEY = "bil-rms.tour.results";
+const TESTER_KEY = "bil-rms.tour.tester";
+
+export type StepResult = "Pass" | "Fail" | "Blocked";
+
+interface Recorded {
+  result: StepResult;
+  notes: string;
+}
+
+/*
+ * Results live in the browser, keyed by the same Test ID the workbook uses,
+ * so a tester can work offline and reconcile afterwards. Nothing is sent
+ * anywhere: there is no endpoint for it, and inventing one would put QA notes
+ * in the same database as the research data.
+ */
+function readResults(): Record<string, Recorded> {
+  try {
+    const raw = window.localStorage.getItem(RESULTS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, Recorded>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeResults(next: Record<string, Recorded>) {
+  try {
+    window.localStorage.setItem(RESULTS_KEY, JSON.stringify(next));
+  } catch {
+    /* Private windows throw; the tour still works, it just forgets. */
+  }
+}
+
+function readTester(): string {
+  try {
+    return window.localStorage.getItem(TESTER_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 /* ---------- state, held outside React ----------
  * The tour has to react to scrolling, resizing and the target element
@@ -33,9 +73,11 @@ interface TourState {
   index: number;
   /** Where the spotlight sits, or null when this step has nothing to point at. */
   rect: { top: number; left: number; width: number; height: number } | null;
+  results: Record<string, Recorded>;
+  tester: string;
 }
 
-let state: TourState = { route: null, index: 0, rect: null };
+let state: TourState = { route: null, index: 0, rect: null, results: {}, tester: "" };
 let listeners: Array<() => void> = [];
 
 function emit() {
@@ -53,7 +95,7 @@ const getSnapshot = () => state;
 
 /* One frozen object, not a fresh one per call: React compares snapshots by
    identity, and a new object every time is an infinite render loop. */
-const SERVER_SNAPSHOT: TourState = { route: null, index: 0, rect: null };
+const SERVER_SNAPSHOT: TourState = { route: null, index: 0, rect: null, results: {}, tester: "" };
 const getServerSnapshot = () => SERVER_SNAPSHOT;
 
 function seenRoutes(): string[] {
@@ -75,13 +117,66 @@ function markSeen(route: string) {
 }
 
 function start(route: string) {
-  state = { route, index: 0, rect: null };
+  state = { route, index: 0, rect: null, results: readResults(), tester: readTester() };
   emit();
+}
+
+function record(id: string, patch: Partial<Recorded>) {
+  const current = state.results[id] ?? { result: "Pass" as StepResult, notes: "" };
+  const results = { ...state.results, [id]: { ...current, ...patch } };
+  writeResults(results);
+  state = { ...state, results };
+  emit();
+}
+
+function setTester(name: string) {
+  try {
+    window.localStorage.setItem(TESTER_KEY, name);
+  } catch {
+    /* ignored, as above */
+  }
+  state = { ...state, tester: name };
+  emit();
+}
+
+/** The whole plan as CSV, in the workbook's column order. */
+function resultsCsv(results: Record<string, Recorded>, tester: string): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const quote = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+  const header = ["Test ID", "Area", "Page", "#", "Action", "Expected result", "Result", "Notes from QA", "Tester", "Date"];
+  const rows = allTestSteps().map((step) => {
+    const hit = results[step.id];
+    return [
+      step.id,
+      step.area,
+      step.path,
+      step.step,
+      step.action,
+      step.expect,
+      hit?.result ?? "Not run",
+      hit?.notes ?? "",
+      hit ? tester : "",
+      hit ? today : "",
+    ].map(quote).join(",");
+  });
+  return [header.map(quote).join(","), ...rows].join(String.fromCharCode(13, 10));
+}
+
+function downloadResults(results: Record<string, Recorded>, tester: string) {
+  const blob = new Blob([String.fromCharCode(0xfeff), resultsCsv(results, tester)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `bil-rms-test-results-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function stop(route: string | null) {
   if (route) markSeen(route);
-  state = { route: null, index: 0, rect: null };
+  state = { ...state, route: null, index: 0, rect: null };
   emit();
 }
 
@@ -192,6 +287,10 @@ export function TesterGuide() {
 
   /* Below the target if there is room, otherwise above it; horizontally
      clamped so the card never hangs off the edge on a laptop screen. */
+  const id = closing || step === undefined ? "" : testId(entry, snap.index);
+  const recordedCount = Object.keys(snap.results).length;
+  const recorded = id ? snap.results[id] : undefined;
+
   const vh = typeof window === "undefined" ? 800 : window.innerHeight;
   const vw = typeof window === "undefined" ? 1280 : window.innerWidth;
   const below = rect ? rect.top + rect.height + 12 : 0;
@@ -276,6 +375,33 @@ export function TesterGuide() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+
+              {/* The export covers every page, not just this one, so a tester
+                  can hand over one file at the end of a session. */}
+              <div className="mt-4 border-t border-[var(--color-divider)] pt-3">
+                <label className="block">
+                  <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--color-icon)]">
+                    Your name
+                  </span>
+                  <input
+                    value={snap.tester}
+                    onChange={(event) => setTester(event.target.value)}
+                    placeholder="Goes in the Tester column"
+                    className="mt-1 w-full rounded border border-[var(--color-divider)] px-2 py-1.5 text-[12px] focus:border-[var(--color-brand)] focus:outline-none"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => downloadResults(snap.results, snap.tester)}
+                  className="mt-2 w-full rounded bg-[var(--color-brand)] px-3 py-2 text-[12px] font-semibold text-white hover:bg-[var(--color-brand-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+                >
+                  Download results (CSV)
+                </button>
+                <p className="mt-1.5 text-[11px] text-[var(--color-icon)]">
+                  {recordedCount} of {allTestSteps().length} steps recorded, across every page. Paste it into the
+                  test-plan workbook — the Test IDs match.
+                </p>
+              </div>
             </>
           ) : (
             <>
@@ -289,6 +415,53 @@ export function TesterGuide() {
                   The control for this step is not on screen — it may need a different page or a sign-in first.
                 </p>
               ) : null}
+
+              {/* Recorded against the same Test ID the workbook uses, so a
+                  result captured here lines up with the row in the sheet. */}
+              <div className="mt-3 border-t border-[var(--color-divider)] pt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--color-icon)]">
+                    Result · {id}
+                  </span>
+                  <div className="flex gap-1">
+                    {(["Pass", "Fail", "Blocked"] as const).map((choice) => {
+                      const chosen = recorded?.result === choice;
+                      const tone =
+                        choice === "Pass"
+                          ? "var(--color-success-fg)"
+                          : choice === "Fail"
+                            ? "var(--color-danger-fg)"
+                            : "var(--color-warning-fg)";
+                      return (
+                        <button
+                          key={choice}
+                          type="button"
+                          aria-pressed={chosen}
+                          onClick={() => record(id, { result: choice })}
+                          className="rounded border px-2 py-1 text-[11px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+                          style={
+                            chosen
+                              ? { background: tone, borderColor: tone, color: "#fff" }
+                              : { borderColor: "var(--color-divider)", color: tone }
+                          }
+                        >
+                          {choice}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <label className="mt-2 block">
+                  <span className="sr-only">Notes for {id}</span>
+                  <textarea
+                    rows={2}
+                    value={recorded?.notes ?? ""}
+                    onChange={(event) => record(id, { notes: event.target.value })}
+                    placeholder="What did you see? Include any reason code."
+                    className="w-full resize-y rounded border border-[var(--color-divider)] px-2 py-1.5 text-[12px] focus:border-[var(--color-brand)] focus:outline-none"
+                  />
+                </label>
+              </div>
             </>
           )}
         </div>

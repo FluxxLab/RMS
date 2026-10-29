@@ -525,6 +525,41 @@ export const GUIDE: readonly GuideEntry[] = [
   },
 ];
 
+/**
+ * A stable identifier for one test step, shared by the app and the test plan
+ * workbook. Derived from the route so it survives steps being reworded, and
+ * changes only if a step is inserted or removed — at which point the sheet
+ * genuinely needs regenerating.
+ */
+export function testId(entry: GuideEntry, index: number): string {
+  const slug =
+    entry.path === "/"
+      ? "PORTAL"
+      : entry.path.replace(/^\//, "").replace(/\//g, "-").toUpperCase();
+  return `${slug}-${String(index + 1).padStart(2, "0")}`;
+}
+
+/** Every step in the plan, flattened — the order the workbook uses. */
+export function allTestSteps(): Array<{
+  id: string;
+  area: string;
+  path: string;
+  step: number;
+  action: string;
+  expect: string;
+}> {
+  return GUIDE.flatMap((entry) =>
+    entry.steps.map((step, index) => ({
+      id: testId(entry, index),
+      area: entry.title,
+      path: entry.path,
+      step: index + 1,
+      action: step.action,
+      expect: step.expect,
+    })),
+  );
+}
+
 /** The entry for a path, by longest matching prefix. */
 export function guideFor(pathname: string): GuideEntry | null {
   let best: GuideEntry | null = null;
