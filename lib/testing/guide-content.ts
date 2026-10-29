@@ -17,6 +17,8 @@
  * on, and routing one through CI put the same decision in two places. Set this
  * to false and redeploy to take the guide out of every build.
  */
+import type { TourTarget } from "./find-target";
+
 export const TESTER_GUIDE_ENABLED = true;
 
 export interface GuideStep {
@@ -24,6 +26,12 @@ export interface GuideStep {
   action: string;
   /** What should happen. If it does not, that is the defect. */
   expect: string;
+  /**
+   * The control this step is about, spotlit while the step is shown. Omit it
+   * for a step with nothing on this page to point at — "sign out, then sign
+   * in as somebody else" — and the card is shown centred instead.
+   */
+  target?: TourTarget;
 }
 
 export interface GuideEntry {
@@ -48,6 +56,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Sign in with the researcher account.",
+        target: { kind: "label", text: "Email" },
         expect:
           "You land on /staff/dashboard, with Bookings, Slots, Studies, Participants and Recruitment in the top bar.",
       },
@@ -62,6 +71,7 @@ export const GUIDE: readonly GuideEntry[] = [
       },
       {
         action: "Sign in with a correct email and a wrong password.",
+        target: { kind: "role", role: "button", name: "Sign in" },
         expect: "“That email and password do not match an account.” Nothing more specific.",
       },
       {
@@ -86,6 +96,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Sign in with the participant account.",
+        target: { kind: "role", role: "button", name: "Sign in" },
         expect: "You reach the portal and can see your bookings, interests and profile.",
       },
       {
@@ -104,6 +115,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Register with an email you have not used before.",
+        target: { kind: "label", text: "Email" },
         expect:
           "An account is created and you are given a pseudonym shaped PIC/2026/LABS/XXXXX. Note it down — staff screens will only ever show you this.",
       },
@@ -133,6 +145,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Set your country to Nigeria.",
+        target: { kind: "text", text: "Country" },
         expect: "State and LGA become required. They are asked only of participants living there.",
       },
       {
@@ -207,6 +220,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Open a study and read the eligibility scorecard rule by rule.",
+        target: { kind: "text", text: "Eligibility" },
         expect: "Every rule shows pass, fail or missing, in plain language rather than a code.",
       },
       {
@@ -258,6 +272,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Note the booking count, make a booking as the participant in another tab, then reload here.",
+        target: { kind: "text", text: "Bookings" },
         expect: "The count has gone up by one.",
       },
       {
@@ -275,6 +290,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Check a participant in.",
+        target: { kind: "role", role: "button", name: /check in/i },
         expect: "Their row shows as attended, and the seat stays taken.",
       },
       {
@@ -313,6 +329,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Find a slot with capacity 1 and run the six-way concurrency stress test.",
+        target: { kind: "role", role: "button", name: /stress test/i },
         expect:
           "A result reading “0 succeeded, 6 correctly rejected. No overbooking.” — this is a PASS, see below.",
       },
@@ -340,6 +357,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Search and filter the registry, then open a participant.",
+        target: { kind: "role", role: "heading", name: /participant/i },
         expect:
           "A pseudonym, screening answers and booking history — and no name, email, phone or NIN anywhere.",
       },
@@ -395,6 +413,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Create a study with an IRB code, inclusion criteria and at least one exclusion rule.",
+        target: { kind: "role", role: "link", name: /new study|create/i },
         expect: "It saves and appears in the list as a draft.",
       },
       {
@@ -446,6 +465,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Invite a research assistant, then sign in as them.",
+        target: { kind: "role", role: "button", name: /invite/i },
         expect: "They reach /staff/dashboard and cannot open /admin.",
       },
       {
@@ -471,6 +491,7 @@ export const GUIDE: readonly GuideEntry[] = [
       },
       {
         action: "Return and find all three.",
+        target: { kind: "role", role: "heading", name: /audit/i },
         expect: "Each entry names the actor, their role, the action and the target, with a timestamp.",
       },
       {
@@ -491,6 +512,7 @@ export const GUIDE: readonly GuideEntry[] = [
     steps: [
       {
         action: "Read each figure and compare it against the screen it summarises.",
+        target: { kind: "text", text: "Studies" },
         expect: "They agree.",
       },
       {

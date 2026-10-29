@@ -1,173 +1,320 @@
 "use client";
 
-import { useCallback, useEffect, useId, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
-import { guideFor } from "@/lib/testing/guide-content";
+import { findTarget } from "@/lib/testing/find-target";
+import { guideFor, type GuideEntry } from "@/lib/testing/guide-content";
 
 /*
- * A floating, per-page crib sheet for testers.
+ * A guided tour for testers: one card at a time, pinned to the control the
+ * step is about, with the rest of the page dimmed.
  *
- * It is mounted only when NEXT_PUBLIC_TESTER_GUIDE is set, so it cannot reach
- * a real participant. Everything it says is advisory: it reads the route and
- * nothing else, holds no state the app depends on, and never touches the API.
+ * It runs only when NEXT_PUBLIC-free TESTER_GUIDE_ENABLED is on, reads the
+ * route and nothing else, and never touches the API. Steps are matched to
+ * elements by role and accessible name — the same way the e2e suite finds
+ * them — so no component needed a test id adding to it.
  *
- * The panel is deliberately not a modal. A tester needs to read the step and
- * then click the thing the step describes, so focus stays where they put it
- * and the page underneath keeps working.
+ * The tour starts itself once per route per browser. After that the floating
+ * button replays it, because a tester who has seen it once should not have to
+ * dismiss it on every visit.
  */
 
-const STORAGE_KEY = "bil-rms.tester-guide.open";
+const SEEN_KEY = "bil-rms.tour.seen";
 
-function readStoredOpen(): boolean {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    // Private windows and blocked site data both throw here. Closed is a safe
-    // default: the button is still there.
-    return false;
-  }
-}
-
-function storeOpen(open: boolean): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, open ? "1" : "0");
-  } catch {
-    /* Not worth surfacing — the panel simply forgets between pages. */
-  }
-}
-
-/*
- * Open/closed is browser state the component subscribes to rather than owns,
- * which keeps the first client render identical to the server's (closed) and
- * lets the stored preference arrive without a setState in an effect.
+/* ---------- state, held outside React ----------
+ * The tour has to react to scrolling, resizing and the target element
+ * appearing late, all of which happen outside a render. Keeping the state in
+ * a small store subscribed to with useSyncExternalStore keeps the first
+ * client render identical to the server's and avoids setState-in-effect.
  */
+
+interface TourState {
+  route: string | null;
+  index: number;
+  /** Where the spotlight sits, or null when this step has nothing to point at. */
+  rect: { top: number; left: number; width: number; height: number } | null;
+}
+
+let state: TourState = { route: null, index: 0, rect: null };
 let listeners: Array<() => void> = [];
-let openState: boolean | null = null;
 
-function subscribe(onChange: () => void): () => void {
-  listeners.push(onChange);
-  return () => {
-    listeners = listeners.filter((listener) => listener !== onChange);
-  };
-}
-
-function getSnapshot(): boolean {
-  if (openState === null) openState = readStoredOpen();
-  return openState;
-}
-
-/** Always closed on the server: there is no storage to read there. */
-function getServerSnapshot(): boolean {
-  return false;
-}
-
-function setOpenState(next: boolean): void {
-  openState = next;
-  storeOpen(next);
+function emit() {
   for (const listener of listeners) listener();
 }
 
-export function TesterGuide() {
-  const pathname = usePathname();
-  const open = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const panelId = useId();
+function subscribe(onChange: () => void) {
+  listeners.push(onChange);
+  return () => {
+    listeners = listeners.filter((l) => l !== onChange);
+  };
+}
 
-  const toggle = useCallback(() => setOpenState(!getSnapshot()), []);
+const getSnapshot = () => state;
+
+/* One frozen object, not a fresh one per call: React compares snapshots by
+   identity, and a new object every time is an infinite render loop. */
+const SERVER_SNAPSHOT: TourState = { route: null, index: 0, rect: null };
+const getServerSnapshot = () => SERVER_SNAPSHOT;
+
+function seenRoutes(): string[] {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function markSeen(route: string) {
+  try {
+    const next = Array.from(new Set([...seenRoutes(), route]));
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(next));
+  } catch {
+    /* Private windows throw. The tour simply offers itself again. */
+  }
+}
+
+function start(route: string) {
+  state = { route, index: 0, rect: null };
+  emit();
+}
+
+function stop(route: string | null) {
+  if (route) markSeen(route);
+  state = { route: null, index: 0, rect: null };
+  emit();
+}
+
+function go(index: number) {
+  state = { ...state, index, rect: null };
+  emit();
+}
+
+/** Measure the current step's target, scrolling it into view if needed. */
+function measure(entry: GuideEntry) {
+  const step = entry.steps[state.index];
+  const el = step?.target ? findTarget(step.target) : null;
+
+  if (!el) {
+    if (state.rect !== null) {
+      state = { ...state, rect: null };
+      emit();
+    }
+    return;
+  }
+
+  const r = el.getBoundingClientRect();
+  const next = { top: r.top, left: r.left, width: r.width, height: r.height };
+  const current = state.rect;
+  const same =
+    current &&
+    Math.abs(current.top - next.top) < 1 &&
+    Math.abs(current.left - next.left) < 1 &&
+    Math.abs(current.width - next.width) < 1 &&
+    Math.abs(current.height - next.height) < 1;
+
+  if (!same) {
+    state = { ...state, rect: next };
+    emit();
+  }
+}
+
+/* ---------- component ---------- */
+
+const PAD = 6;
+const CARD_W = 360;
+
+export function TesterGuide() {
+  const pathname = usePathname() ?? "/";
+  const snap = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const entry = guideFor(pathname);
+  const running = entry !== null && snap.route === pathname;
+
+  // Offer the tour the first time a route is seen. A store action, not a
+  // setState, so the render loop is untouched.
+  useEffect(() => {
+    if (entry === null) return;
+    if (seenRoutes().includes(pathname)) return;
+    const timer = window.setTimeout(() => start(pathname), 600);
+    return () => window.clearTimeout(timer);
+  }, [pathname, entry]);
+
+  // A step's target can arrive late, move while scrolling, or never exist.
+  // Re-measuring on a frame loop covers all three without special-casing any.
+  useEffect(() => {
+    if (!running || entry === null) return;
+    let frame = 0;
+    const tick = () => {
+      measure(entry);
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [running, entry, snap.index]);
+
+  const total = entry?.steps.length ?? 0;
+  const next = useCallback(() => {
+    if (snap.index + 1 < total) go(snap.index + 1);
+    else go(total); // the closing card
+  }, [snap.index, total]);
+
+  const back = useCallback(() => go(Math.max(0, snap.index - 1)), [snap.index]);
+  const end = useCallback(() => stop(pathname), [pathname]);
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenState(false);
+    if (!running) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") end();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") back();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [running, next, back, end]);
 
-  const entry = guideFor(pathname ?? "/");
   if (entry === null) return null;
 
-  return (
-    <div className="pointer-events-none fixed inset-y-0 right-0 z-50 flex max-w-full flex-col items-end justify-end gap-3 p-4 sm:p-6">
-      {open ? (
-        <section
-          id={panelId}
-          aria-labelledby={`${panelId}-title`}
-          className="pointer-events-auto flex max-h-[min(34rem,calc(100vh-7rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg bg-[var(--color-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.18)] ring-1 ring-[var(--color-divider)]"
-        >
-          <header className="flex items-start gap-3 bg-[var(--color-brand)] px-4 py-3 text-white">
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold tracking-wide uppercase opacity-80">Tester guide</p>
-              <h2 id={`${panelId}-title`} className="truncate text-sm font-semibold">
-                {entry.title}
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label="Close tester guide"
-              className="-mr-1 shrink-0 rounded px-2 py-1 text-lg leading-none text-white/80 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            >
-              &times;
-            </button>
-          </header>
-
-          <div className="flex-1 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed text-[var(--color-ink)]">
-            <p className="text-[var(--color-icon)]">{entry.goal}</p>
-
-            <h3 className="mt-4 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-icon)]">
-              Do this, in order
-            </h3>
-            <ol className="mt-1.5 list-decimal space-y-3 pl-4 marker:font-semibold marker:text-[var(--color-brand)]">
-              {entry.steps.map((step) => (
-                <li key={step.action}>
-                  <span className="font-semibold text-[var(--color-ink)]">{step.action}</span>
-                  {/* The expected result is the test. Without it a step only
-                      proves that something happened. */}
-                  <span className="mt-0.5 block text-[var(--color-icon)]">
-                    <span className="font-semibold text-[var(--color-brand)]">Expect: </span>
-                    {step.expect}
-                  </span>
-                </li>
-              ))}
-            </ol>
-
-            <h3 className="mt-4 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-success-fg)]">
-              Correct — do not report
-            </h3>
-            <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-success-stroke)] bg-[var(--color-success-bg)] px-3 py-2">
-              {entry.accept.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-
-            <h3 className="mt-4 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-danger-fg)]">
-              Raise this if you see it
-            </h3>
-            <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-danger-stroke)] bg-[var(--color-danger-bg)] px-3 py-2">
-              {entry.report.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-
-            <p className="mt-4 border-t border-[var(--color-divider)] pt-3 text-[12px] text-[var(--color-icon)]">
-              Unsure whether something is a defect? Ask before writing it up.
-            </p>
-          </div>
-        </section>
-      ) : null}
-
+  if (!running) {
+    return (
       <button
         type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--color-brand)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.22)] hover:bg-[var(--color-brand-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] active:bg-[var(--color-brand-pressed)]"
+        onClick={() => start(pathname)}
+        className="fixed right-4 bottom-4 z-[60] flex items-center gap-2 rounded-full bg-[var(--color-brand)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(0,0,0,0.22)] hover:bg-[var(--color-brand-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)] sm:right-6 sm:bottom-6"
       >
-        <span aria-hidden="true" className="text-base leading-none">
-          ?
-        </span>
-        {open ? "Hide guide" : "Testing guide"}
+        <span aria-hidden="true">?</span> Guide me
       </button>
-    </div>
+    );
+  }
+
+  const closing = snap.index >= total;
+  const step = closing ? null : entry.steps[snap.index];
+  const rect = closing ? null : snap.rect;
+
+  /* Below the target if there is room, otherwise above it; horizontally
+     clamped so the card never hangs off the edge on a laptop screen. */
+  const vh = typeof window === "undefined" ? 800 : window.innerHeight;
+  const vw = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const below = rect ? rect.top + rect.height + 12 : 0;
+  const placeAbove = rect ? below > vh - 220 : false;
+  const cardTop = rect ? (placeAbove ? Math.max(12, rect.top - 12) : below) : vh / 2;
+  const cardLeft = rect
+    ? Math.min(Math.max(12, rect.left + rect.width / 2 - CARD_W / 2), vw - CARD_W - 12)
+    : Math.max(12, vw / 2 - CARD_W / 2);
+
+  return (
+    <>
+      {/* The dim. A ring-shaped shadow makes the cutout, so the control stays
+          readable and clickable while everything else recedes. */}
+      {rect ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed z-[55] rounded-md transition-all duration-200"
+          style={{
+            top: rect.top - PAD,
+            left: rect.left - PAD,
+            width: rect.width + PAD * 2,
+            height: rect.height + PAD * 2,
+            boxShadow: "0 0 0 9999px rgba(15, 19, 51, 0.55)",
+            outline: "2px solid var(--color-brand)",
+          }}
+        />
+      ) : (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[55] bg-[rgba(15,19,51,0.55)]" />
+      )}
+
+      <section
+        role="dialog"
+        aria-live="polite"
+        aria-label={`Tester guide: ${entry.title}`}
+        className="fixed z-[60] w-[min(22.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg bg-[var(--color-surface)] shadow-[0_12px_40px_rgba(0,0,0,0.3)]"
+        style={{
+          top: cardTop,
+          left: cardLeft,
+          transform: placeAbove ? "translateY(-100%)" : undefined,
+        }}
+      >
+        <header className="flex items-center justify-between gap-3 bg-[var(--color-brand)] px-4 py-2.5 text-white">
+          <p className="text-[11px] font-semibold tracking-wide uppercase opacity-85">
+            {entry.title} · {closing ? "Finish" : `Step ${snap.index + 1} of ${total}`}
+          </p>
+          <button
+            type="button"
+            onClick={end}
+            aria-label="End the guide"
+            className="-mr-1 rounded px-2 py-0.5 text-lg leading-none text-white/80 hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            &times;
+          </button>
+        </header>
+
+        <div className="max-h-[22rem] overflow-y-auto px-4 py-3 text-[13px] leading-relaxed text-[var(--color-ink)]">
+          {closing ? (
+            <>
+              <p className="font-semibold">Before you write anything up</p>
+              <p className="mt-1 text-[12px] text-[var(--color-icon)]">{entry.goal}</p>
+
+              <h3 className="mt-3 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-success-fg)]">
+                Correct — do not report
+              </h3>
+              <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-success-stroke)] bg-[var(--color-success-bg)] px-3 py-2">
+                {entry.accept.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+
+              <h3 className="mt-3 text-[11px] font-semibold tracking-wide uppercase text-[var(--color-danger-fg)]">
+                Raise this if you see it
+              </h3>
+              <ul className="mt-1.5 space-y-1.5 rounded border border-[var(--color-danger-stroke)] bg-[var(--color-danger-bg)] px-3 py-2">
+                {entry.report.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">{step?.action}</p>
+              <p className="mt-1.5">
+                <span className="font-semibold text-[var(--color-brand)]">Expect: </span>
+                <span className="text-[var(--color-icon)]">{step?.expect}</span>
+              </p>
+              {step?.target && rect === null ? (
+                <p className="mt-2 text-[12px] text-[var(--color-warning-fg)]">
+                  The control for this step is not on screen — it may need a different page or a sign-in first.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <footer className="flex items-center justify-between gap-2 border-t border-[var(--color-divider)] px-4 py-2.5">
+          <button
+            type="button"
+            onClick={end}
+            className="rounded px-2 py-1 text-[12px] text-[var(--color-icon)] hover:text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+          >
+            Skip
+          </button>
+          <div className="flex items-center gap-2">
+            {snap.index > 0 ? (
+              <button
+                type="button"
+                onClick={back}
+                className="rounded border border-[var(--color-divider)] px-3 py-1.5 text-[12px] font-semibold text-[var(--color-ink)] hover:bg-[var(--color-rail)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+              >
+                Back
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={closing ? end : next}
+              className="rounded bg-[var(--color-brand)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[var(--color-brand-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)]"
+            >
+              {closing ? "Done" : "Next"}
+            </button>
+          </div>
+        </footer>
+      </section>
+    </>
   );
 }
